@@ -1,0 +1,143 @@
+---
+title: "Increasing heat exhibits"
+author: "Carlos Dobler"
+date: "2022-11-15"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = F,
+                      message = F,
+                      warning = F,
+                      fig.height=32, 
+                      fig.width=9, 
+                      out.width="100%")
+
+source(here::here("scripts/setup.R"))
+library(patchwork)
+
+dir_results <- "/mnt/bucket_mine/results/global_heat_pf/03_mosaicked/"
+
+windows <- tibble(area = c("NAM", "SAM", "AFR", "CAS", "AUS"),
+                  x1 = c(-130, -100, -15, 30, 95),
+                  y1 = c(15, -20, 0, 15, -35))
+
+
+fn_plot <- function(x1, y1, ...){
+  
+  s %>% 
+      st_set_dimensions("warming_levels", value = seq(0.5, 3.0, 0.5)) %>% 
+      select(mean) %>% 
+      filter(lon > x1,
+             lon < x1+60,
+             lat > y1,
+             lat < y1+50) %>% 
+      as_tibble() %>% 
+      
+      ggplot(aes(lon, lat, fill = mean)) +
+      geom_raster() +
+      colorspace::scale_fill_binned_sequential("plasma", 
+                                               rev = F,
+                                               na.value = "transparent",
+                                               name = NULL,
+                                               n.breaks = 13) +
+      facet_wrap(~warming_levels, ncol = 3) +
+      theme(axis.title = element_blank(),
+            legend.position = "bottom") +
+      coord_equal() +
+      guides(fill = guide_colourbar(barwidth = 25, barheight = 0.5, ticks = F))
+  
+}
+
+```
+
+
+## Days above 32C
+
+```{r}
+
+s <- 
+  dir_results %>% 
+  list.files(full.names = T) %>% 
+  str_subset("32") %>% 
+  read_ncdf(var = "mean")
+
+
+pmap(windows, fn_plot) %>% 
+  wrap_plots(ncol = 1)
+
+
+```
+
+
+## Days above 35C
+
+```{r}
+
+s <- 
+  dir_results %>% 
+  list.files(full.names = T) %>% 
+  str_subset("35") %>% 
+  read_ncdf(var = "mean")
+
+
+pmap(windows, fn_plot) %>% 
+  wrap_plots(ncol = 1)
+
+
+```
+
+
+## Days above 38C
+
+```{r}
+
+s <- 
+  dir_results %>% 
+  list.files(full.names = T) %>% 
+  str_subset("38") %>% 
+  read_ncdf(var = "mean")
+
+
+pmap(windows, fn_plot) %>% 
+  wrap_plots(ncol = 1)
+
+
+```
+
+
+## 10 hottest days
+
+```{r}
+
+s <- 
+  dir_results %>% 
+  list.files(full.names = T) %>% 
+  str_subset("ten") %>% 
+  read_ncdf(var = "mean")
+
+
+pmap(windows, fn_plot) %>% 
+  wrap_plots(ncol = 1)
+
+
+```
+
+
+## Avg. daytime temperature
+
+```{r}
+
+s <- 
+  dir_results %>% 
+  list.files(full.names = T) %>% 
+  str_subset("mean-tasmax") %>% 
+  read_ncdf(var = "mean")
+
+
+pmap(windows, fn_plot) %>% 
+  wrap_plots(ncol = 1)
+
+
+```
+
