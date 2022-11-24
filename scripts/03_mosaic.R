@@ -1,9 +1,4 @@
 
-source("scripts/setup.R")
-source("scripts/functions.R")
-
-plan(multicore)
-
 
 tb_dom <- 
   tibble(
@@ -14,28 +9,29 @@ tb_dom <-
 
 
 
-derived_vars <- c("days-gec-32C",
-                  "days-gec-35C",
-                  "days-gec-38C",
-                  "ten-hottest-days",
-                  "mean-tasmax")
+
+print(str_glue("Preparing to mosaick..."))
 
 
 
+# TEMPLATE DOMAIN MAPS
 
-
-l_s <-
+l_s_valid <-
+  
   map(set_names(tb_dom$dom), function(dom){
     
+    # load map
     s <- 
       str_glue("{dir_bucket_mine}/results/global_heat_pf/02_ensembled") %>%
       list.files(full.names = T) %>%
       str_subset(dom) %>%
-      str_subset(derived_vars[1]) %>%
-      read_ncdf(var = "mean", ncsub = cbind(start = c(1,1,1), count = c(NA, NA, 1))) %>%
+      str_subset(derived_vars[1]) %>% # any var works
+      read_ncdf(var = "mean", # any statistic works 
+                ncsub = cbind(start = c(1,1,1), count = c(NA, NA, 1))) %>% # only 1 timestep
       suppressMessages() %>% 
       adrop()
     
+    # fix domains trespassing the 360 meridian  
     if(dom == "EAS"){
       
       s <- 
@@ -77,12 +73,8 @@ l_s <-
     
     return(s)
     
-    
-  })
-
-
-l_s_valid <- 
-  l_s %>% 
+  }) %>% 
+  
   map(function(s){
     
     s %>% 
@@ -91,6 +83,11 @@ l_s_valid <-
     
   })
 
+
+
+
+
+# GLOBAL TEMPLATE
 
 global <- 
   c(
@@ -104,7 +101,12 @@ global <-
 
 
 
+
+
+# INVERSE DISTANCES
+
 l_s_dist <-
+  
   pmap(tb_dom, function(dom, centr_lon, centr_lat){
     
     s_valid <-
@@ -115,50 +117,34 @@ l_s_dist <-
       s_valid %>%
       st_as_sf(as_points = T)
     
-    # centr_lon <- tb_dom[tb_dom$dom == dom,]$centr_lon
-    # centr_lat <- tb_dom[tb_dom$dom == dom,]$centr_lat
-    
     centr <-
       st_point(c(centr_lon, centr_lat)) %>%
       st_sfc() %>%
       st_set_crs(4326)
     
-    # radius <- 
-    #   dim(s_valid) %>% 
-    #   max() %>% 
-    #   {./2} %>% 
-    #   round()
-    
     s_dist <-
       pt_valid %>%
       mutate(dist = st_distance(., centr),
              dist = set_units(dist, NULL),
-             # dist = ifelse(dist > radius*20000, radius*20000, dist),
-             # dist = 1/dist^0.1,
-             # dist = 1/log(dist),
              dist = max(dist)-dist,
-             # dist = 1/log(dist),
              # dist = 1/dist,
-             dist = scales::rescale(dist)
+             dist = scales::rescale(dist),
+             dist = dist^2
       ) %>%
       select(dist) %>%
       st_rasterize(global)
-    # st_rasterize(s_valid)
-    
-    
-    # s_dist %>%
-    #   slice(x, 369) %>%
-    #   as_tibble() %>%
-    #   pull(dist) %>% #range(na.rm = T)
-    #   .[!is.na(.)] %>%
-    #   # .[. < 0.2] %>%
-    #   plot()
     
     return(s_dist)
     
   }) %>%
   set_names(tb_dom$dom)
 
+
+
+
+
+# SUMMED DISTANCES 
+# (only in overlapping areas)
 
 l_s_dist %>% 
   do.call(c, .) %>% 
@@ -168,7 +154,8 @@ l_s_dist %>%
     bar <- ifelse(is.na(foo), 0, 1)
     
     if(sum(bar) > 1){
-      sum(foo^2, na.rm = T)
+      # sum(foo^2, na.rm = T)
+      sum(foo, na.rm = T)
     } else {
       NA
     }
@@ -178,13 +165,21 @@ l_s_dist %>%
   .fname = "sum_intersect") -> s_intersections
 
 
+
+
+
+# WEIGHTS PER DOMAIN
+
 l_s_weights <- 
   map(l_s_dist, function(s){
     
     c(s, s_intersections) %>% 
       
       mutate(sum_intersect = ifelse(sum_intersect == 0, 1e-10, sum_intersect)) %>% 
-      mutate(weights = ifelse(is.na(sum_intersect) & !is.na(dist), 1, dist^2/sum_intersect)) %>%
+      
+      # 1 if no intersection; domain's distance / summed distance otherwise
+      # mutate(weights = ifelse(is.na(sum_intersect) & !is.na(dist), 1, dist^2/sum_intersect)) %>%
+      mutate(weights = ifelse(is.na(sum_intersect) & !is.na(dist), 1, dist/sum_intersect)) %>%
       select(weights)
     
   })
@@ -194,29 +189,26 @@ l_s_weights <-
 
 
 
-# LOOP THROUGH WL AND VARS
+# MOSAIC
 
-# derived_vars_ <- derived_vars[2]
-# wl_ <- "2.0"
-# wl_pos <- 4
-
-
-wl <- c("0.5", "1.0", "1.5", "2.0", "2.5", "3.0")
-
+# loop through variables
 walk(derived_vars, function(derived_vars_){
   
-  print(derived_vars_)
+  print(str_glue("Mosaicking {derived_vars_}"))
   
   l_mos_wl <- 
     
+    # loop through warming levels
     imap(wl, function(wl_, wl_pos){
       
-      print(wl_)
+      print(str_glue("    {wl_}"))
       
       l_s_weighted <- 
         
+        # loop through domains
         map(tb_dom$dom, function(dom){
           
+          # load ensembled map
           s <- 
             str_glue("{dir_bucket_mine}/results/global_heat_pf/02_ensembled") %>%
             list.files(full.names = T) %>%
@@ -225,6 +217,7 @@ walk(derived_vars, function(derived_vars_){
             read_ncdf %>%
             suppressMessages()
           
+          # # fix domains trespassing the 360 meridian 
           if(dom == "EAS"){
             
             s <- 
@@ -257,7 +250,7 @@ walk(derived_vars, function(derived_vars_){
                   s2 %>% select(v)
                 ) %>% 
                   map(as, "SpatRaster") %>% 
-                  do.call(terra::merge, .) %>% #plot()
+                  do.call(terra::merge, .) %>%
                   st_as_stars(proxy = F) %>% 
                   setNames(v) %>% 
                   st_set_dimensions(c(1,2,3), names = c("lon", "lat", "warming_levels")) %>% 
@@ -268,15 +261,15 @@ walk(derived_vars, function(derived_vars_){
             
           }
           
-          
           r <- 
             s %>% 
-            st_warp(l_s_weights[[1]]) %>% 
-            slice(warming_levels, wl_pos)
+            st_warp(l_s_weights[[1]]) %>% # any global map
+            slice(warming_levels, wl_pos) # only 1 layer
           
           c(r,
             l_s_weights %>% pluck(dom)) %>% 
             
+            # apply weights
             mutate(mean = mean*weights,
                    perc05 = perc05*weights,
                    perc50 = perc50*weights,
@@ -303,7 +296,7 @@ walk(derived_vars, function(derived_vars_){
           }
           
         },
-        FUTURE = T) %>% 
+        FUTURE = F) %>% 
         setNames(wl_) -> mos
       
       return(mos)
@@ -317,7 +310,10 @@ walk(derived_vars, function(derived_vars_){
     merge(name = "warming_level") %>% 
     split("stats")
   
+  print(str_glue("  Saving"))
+  print(str_glue(" "))
   
+  # save as nc
   fn_write_nc_wtime_wvars(s, 
                           str_glue("/mnt/bucket_mine/results/global_heat_pf/03_mosaicked/{derived_vars_}_v01.nc"))
   
@@ -329,14 +325,24 @@ walk(derived_vars, function(derived_vars_){
 
 
 
+a <- seq(1,0, by = -0.05)[6]
+b <- seq(1,0, by = -0.05)[2]
+
+d <- sum(c(a,b)^2)
+
+a^2/d
+b^2/d
+
+(a^2/d) + (b^2/d)
 
 
 
+a <- (seq(1,0, by = -0.05)^2)[6]
+b <- (seq(1,0, by = -0.05)^2)[2]
 
+d <- sum(a,b)
 
-
-
-
+(a/d) + (b/d)
 
 
 

@@ -1,4 +1,157 @@
 
+fn_data_table <- function(vari){
+  
+  dir_remo <- str_glue("{dir_bucket_cmip5}/RCM_regridded_data/REMO2015/{dom}/daily/{vari}")
+  dir_regcm <- str_glue("{dir_bucket_cmip5}/RCM_regridded_data/CORDEX_22/{dom}/daily/{vari}")
+  
+  
+  tb_files <- 
+    map_dfr(c(dir_remo, dir_regcm), function(dd){
+      
+      if(str_detect(dd, "REMO2015")){
+        rcm_ = "REMO2015"
+        i = 0
+      } else if(str_detect(dd, "CORDEX_22")){
+        rcm_ = "RegCM4"
+        i = 1
+      }
+      
+      
+      if(str_detect(vari, "wetbulb")){
+        
+        dd %>% 
+          list.files() %>%
+          str_subset(".nc$") %>% 
+          
+          map_dfr(function(d){
+            
+            tibble(file = d) %>%
+              
+              mutate(
+                
+                var = "maxwetbulb",
+                
+                gcm = file %>%
+                  str_split("_", simplify = T) %>%
+                  .[ , i+3],
+                
+                rcm = rcm_,
+                
+                t_i = file %>%
+                  str_split("_", simplify = T) %>%
+                  .[ , i+4] %>%
+                  str_sub(end = 4) %>% 
+                  str_c("-01-01"),
+                
+                t_f = file %>%
+                  str_split("_", simplify = T) %>%
+                  .[ , i+4] %>%
+                  str_sub(end = 4) %>% 
+                  str_c("-12-01"),
+                
+                loc = dd
+                
+              )
+          }) 
+        
+        
+        
+      } else {
+        
+        dd %>% 
+          list.files() %>%
+          .[str_length(.) > 80] %>% 
+          str_subset(".nc$") %>% 
+          
+          map_dfr(function(d){
+            
+            tibble(file = d) %>%
+              
+              mutate(
+                
+                var = file %>%
+                  str_split("_", simplify = T) %>%
+                  .[ , 1],
+                
+                gcm = file %>%
+                  str_split("_", simplify = T) %>%
+                  .[ , 3],
+                
+                rcm = file %>%
+                  str_split("_", simplify = T) %>%
+                  .[ , 6] %>% 
+                  str_split("-", simplify = T) %>% 
+                  .[ , 2],
+                
+                t_i = file %>%
+                  str_split("_", simplify = T) %>%
+                  .[ , 9] %>%
+                  str_sub(end = 6) %>% 
+                  str_c("01"),
+                
+                t_f = file %>%
+                  str_split("_", simplify = T) %>%
+                  .[ , 9] %>%
+                  str_sub(start = 10, end = 16) %>% 
+                  str_c("01"),
+                
+                loc = dd
+                
+              )
+          }) 
+      }
+      
+      
+    }) %>% 
+    
+    filter(year(as_date(t_i)) >= 1970) %>% 
+    filter(
+      str_detect(gcm, "EC-EARTH", negate = T),
+      str_detect(gcm, "CERFACS", negate = T),
+      str_detect(gcm, "CNRM", negate = T)
+    )
+  
+  return(tb_files)
+}
+
+
+# ************
+
+
+fn_models_table <- function(tb_files){
+  
+  tb_models <- 
+    unique(tb_files[, c("gcm", "rcm")]) %>% 
+    mutate(calendar = case_when(str_detect(gcm, "Had") ~ 360,
+                                str_detect(rcm, "REMO") & str_detect(gcm, "Had", negate = T) ~ 365.25,
+                                str_detect(rcm, "RegCM") & str_detect(gcm, "MPI") ~ 365.25,
+                                str_detect(rcm, "RegCM") & str_detect(gcm, "Nor") ~ 365,
+                                str_detect(rcm, "RegCM") & str_detect(gcm, "GFDL") ~ 365))
+  
+  
+  if(dom %in% c("SAM", "AUS", "CAS")){
+    
+    tb_models <- 
+      tb_models %>% 
+      filter(str_detect(rcm, "RegCM", negate = T))
+    
+  }
+  
+  return(tb_models)
+}
+
+
+# ************
+
+
+
+
+
+
+
+
+
+
 fn_dates <- function(d, cal_type){
   
   if(cal_type == 360){
