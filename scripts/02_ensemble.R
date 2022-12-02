@@ -7,6 +7,7 @@
 
 for(dom in doms){
 
+  print(str_glue(" "))
   print(str_glue("PROCESSING {dom}"))
   
   
@@ -80,7 +81,6 @@ for(dom in doms){
         s %>%
           st_set_dimensions("time",
                             values = st_get_dimension_values(s, "time") %>%
-                              as.character() %>%
                               ymd() %>%
                               year()
                             ) %>%
@@ -96,8 +96,6 @@ for(dom in doms){
     
     
     # LOOP THROUGH WL
-    
-    
     
     l_s_wl <- 
       
@@ -128,7 +126,7 @@ for(dom in doms){
               
               thres_val <-
                 thresholds %>%
-                filter(str_detect(Model, str_glue("-{gcm_}$"))) %>% 
+                filter(str_detect(Model, str_glue("{gcm_}$"))) %>% 
                 filter(wl == wl_) %>% 
                 pull(value)
               
@@ -147,7 +145,7 @@ for(dom in doms){
 
           st_apply(c(1,2),
                    fn_statistics,
-                   FUTURE = T,
+                   FUTURE = F,
                    .fname = "stats") %>%
           aperm(c(2,3,1)) %>%
           split("stats")
@@ -172,4 +170,33 @@ for(dom in doms){
   }
   
 }
+
+
+
+# map_dfr(doms, function(dom){
+#   
+#   ff <- 
+#     dir_derived %>% 
+#     list.files() %>% 
+#     str_subset(dom) %>% #str_subset("wetbulb") %>% .[1] -> f
+#     str_subset(derived_vars_)
+#   
+#   
+#   map_dfr(ff, function(f){
+#     
+#     gcm_ <- f %>% str_split("_", simplify = T) %>% .[,5] %>% str_remove(".nc")
+#     
+#     
+    # thresholds %>%
+    #   filter(str_detect(Model, str_glue("{gcm_}$"))) %>%
+    #   filter(wl == "1.0") %>%
+    #   select(Model) %>%
+    #   mutate(gcm = gcm_,
+    #          dom = dom)
+#     
+#   })
+#   
+#   
+# }) %>% View()
+#   
 

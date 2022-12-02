@@ -33,7 +33,7 @@ str_glue("{dir_bucket_mine}/misc_data/CMIP5_model_temp_thresholds.csv") %>%
 thresholds %>% 
   mutate(wl = ifelse(str_length(wl) == 1, str_glue("{wl}.0"), wl)) -> thresholds
 
-thresholds %>% 
+thresholds %>%
   mutate(Model = case_when(str_detect(Model, "HadGEM") ~ str_glue("MOHC-{Model}"),
                            str_detect(Model, "MPI") ~ str_glue("MPI-M-{Model}"),
                            str_detect(Model, "NorESM") ~ str_glue("NCC-{Model}"),
@@ -86,17 +86,17 @@ tb_vars <-
                   
     ),
     
-    change_import = c("nothing",
-                      "nothing",
-                      "nothing",
+    change_import = c("fix_date",
+                      "fix_date",
+                      "fix_date",
                       "fix_date_convert_C",
-                      "convert_C",
-                      "nothing",
+                      "fix_date_convert_C",
+                      "fix_date",
                       
-                      "nothing",
-                      "nothing",
-                      "convert_C",
-                      "nothing",
+                      "fix_date",
+                      "fix_date",
+                      "fix_date_convert_C",
+                      "fix_date",
                       
                       "fix_date",
                       "fix_date",
@@ -104,6 +104,26 @@ tb_vars <-
                       "fix_date",
                       "fix_date"
                       
+    ),
+    
+    final_name = c("days-above-32C",
+                   "days-above-35C",
+                   "days-above-38C",
+                   "ten-hottest-days",
+                   "average-daytime-temperature",
+                   "freezing-days",
+                   
+                   "nights-above-20C",
+                   "nights-above-25C",
+                   "average-nighttime-temperature",
+                   "frost-nights",
+                   
+                   "days-above-26C-wetbulb",
+                   "days-above-28C-wetbulb",
+                   "days-above-30C-wetbulb",
+                   "days-above-32C-wetbulb",
+                   "ten-hottest-wetbulb-days"
+      
     )
   )
 

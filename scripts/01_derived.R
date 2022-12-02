@@ -5,6 +5,7 @@
 
 for(dom in doms){
   
+  print(str_glue(" "))
   print(str_glue("PROCESSING {dom}"))
   
   # DATA TABLE ------------------------------------------------------------------------------------
@@ -17,10 +18,6 @@ for(dom in doms){
   
   tb_models <- 
     fn_models_table(tb_files)
-  
-  # tb_models %>% 
-  #   filter(str_detect(rcm, "REMO")) %>% 
-  #   filter(str_detect(gcm, "Had", negate = T)) -> tb_models                               # ************
   
   
   # LOOP THROUGH MODELS ---------------------------------------------------------------------------
@@ -66,22 +63,60 @@ for(dom in doms){
       filter(gcm == gcm_,
              rcm == rcm_) %>% 
       
-      future_pwalk(function(file, t_i, ...){
+      future_pwalk(function(file, t_i, t_f, ...){
         
-        yr <- year(as_date(t_i))
+        yr_i <- year(as_date(t_i))
+        yr_f <- year(as_date(t_f))
+        
         f <- str_glue("{dir_raw_data}/{file}")
         
-        f_new <- str_replace(file, ".nc", "_yrfix.nc")
-        f_new <- str_glue("{dir_raw_data}/{f_new}")
         
-        system(str_glue("cdo -a setdate,{yr}-01-01 {f} {f_new}"),
-               ignore.stdout = T, ignore.stderr = T)
+        if(str_detect(var_input, "wetbulb")){
+          
+          f_new <- str_glue("{dir_raw_data}/yrfix_{yr_i}.nc")
+          
+          system(str_glue("cdo -a setdate,{yr_i}-01-01 {f} {f_new}"),
+                 ignore.stdout = T, ignore.stderr = T)
+          
+          file.remove(f)
+          
+          
+        } else {
+          
+          system(str_glue("cdo splityear {f} {dir_raw_data}/yrsplit_"),
+                 ignore.stdout = T, ignore.stderr = T)
+          
+          dir_raw_data %>% 
+            list.files(full.names = T) %>% 
+            str_subset("yrsplit") %>%
+            str_subset(str_flatten(yr_i:yr_f, "|")) %>% 
+            
+            walk2(seq(yr_i, yr_f), function(f2, yr){
+              
+              f_new <- str_glue("{dir_raw_data}/yrfix_{yr}.nc")
+              
+              system(str_glue("cdo -a setdate,{yr}-01-01 {f2} {f_new}"),
+                     ignore.stdout = T, ignore.stderr = T)
+              
+              file.remove(f2)
+              
+            })
+          
+          file.remove(f)
+          
+          # print(t_i)
+          
+          
+        }
         
-        file.remove(f)
-        
-        # print(yr)
         
       })
+    
+    
+    dir_raw_data %>% 
+      list.files(full.names = T) %>% 
+      str_subset("yrsplit") %>% 
+      walk(file.remove)
 
     
     ff <-
@@ -118,9 +153,3 @@ for(dom in doms){
   
 }
 
-
-# dir_derived %>%
-#   list.files(full.names = T) %>%
-#   str_subset("AFR") %>%
-#   str_subset("wetbulb") %>%
-#   walk(file.remove)

@@ -41,13 +41,13 @@ fn_data_table <- function(vari){
                   str_split("_", simplify = T) %>%
                   .[ , i+4] %>%
                   str_sub(end = 4) %>% 
-                  str_c("-01-01"),
+                  str_c("0101"),
                 
                 t_f = file %>%
                   str_split("_", simplify = T) %>%
                   .[ , i+4] %>%
                   str_sub(end = 4) %>% 
-                  str_c("-12-01"),
+                  str_c("1201"),
                 
                 loc = dd
                 
@@ -92,7 +92,7 @@ fn_data_table <- function(vari){
                 t_f = file %>%
                   str_split("_", simplify = T) %>%
                   .[ , 9] %>%
-                  str_sub(start = 10, end = 16) %>% 
+                  str_sub(start = 10, end = 15) %>% 
                   str_c("01"),
                 
                 loc = dd

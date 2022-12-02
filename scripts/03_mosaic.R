@@ -187,6 +187,36 @@ l_s_weights <-
 
 
 
+# LAND MASK
+
+# rast_reference_0.05 <- 
+#   st_as_stars(st_bbox(global), dx = 0.05, dy = 0.05, values = -9999) 
+# 
+# land <- 
+#   "/mnt/bucket_mine/misc_data/ne_50m_land/ne_50m_land.shp" %>% 
+#   st_read() %>% 
+#   mutate(a = 1) %>%
+#   select(a) %>% 
+#   st_rasterize(rast_reference_0.05)
+# 
+# land <- 
+#   land %>%
+#   st_warp(global, use_gdal = T, method = "max") %>%
+#   suppressWarnings() %>% 
+#   setNames("a") %>%
+#   mutate(a = ifelse(a == -9999, NA, 1))
+# 
+# land %>% 
+#   as("SpatRaster") %>% 
+#   terra::buffer(1000) -> foo
+
+land <- 
+  "/mnt/bucket_cmip5/Probable_futures/irunde_scripts/create_a_dataset/04_rcm_buffered_ocean_mask.nc" %>% 
+  read_ncdf() %>%
+  st_warp(global) %>% 
+  setNames("a")
+
+
 
 
 # MOSAIC
@@ -310,16 +340,35 @@ walk(derived_vars, function(derived_vars_){
     merge(name = "warming_level") %>% 
     split("stats")
   
+  
+  s <- 
+    s %>% 
+    round(1)
+  
+  s[is.na(land)] <- NA
+  
+  
   print(str_glue("  Saving"))
   print(str_glue(" "))
   
   # save as nc
+  
+  f_name <- 
+    tb_vars %>% 
+    filter(var_derived == derived_vars_) %>% 
+    pull(final_name)
+  
   fn_write_nc_wtime_wvars(s, 
-                          str_glue("/mnt/bucket_mine/results/global_heat_pf/03_mosaicked/{derived_vars_}_v01.nc"))
+                          str_glue("/mnt/bucket_mine/results/global_heat_pf/03_mosaicked/{f_name}_v01.nc"))
   
   
   
 })
+
+
+
+
+
 
 
 
