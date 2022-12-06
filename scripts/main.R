@@ -1,7 +1,8 @@
 
 var_input <- c("maximum_temperature",
                "minimum_temperature",
-               "maximum_wetbulb_temperature")[3] 
+               "maximum_wetbulb_temperature",
+               "average_temperature")[4] 
 
 
 source("scripts/setup.R")

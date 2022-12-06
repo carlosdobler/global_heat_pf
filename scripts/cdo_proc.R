@@ -124,6 +124,23 @@ fn_cdo <- function(var_d){
     
     
     
+    
+    # MEAN TEMP
+    # *************
+    # *************
+    
+  } else if(var_d == "mean-tasmean"){
+    
+    outfile <-
+      str_glue("{dir_derived}/{dom}_{var_d}_yr_{rcm_}_{gcm_}.nc")
+    
+    str_glue("cdo yearmean {dir_cat}/cat.nc {outfile}") %>%
+      system(ignore.stdout = T, ignore.stderr = T)
+    
+    
+    
+    
+    
     # MIN TEMP
     # *************
     # *************

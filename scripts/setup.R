@@ -63,7 +63,9 @@ tb_vars <-
                     "days-gec-28C-wetbulb",
                     "days-gec-30C-wetbulb",
                     "days-gec-32C-wetbulb",
-                    "ten-hottest-days-wetbulb"
+                    "ten-hottest-days-wetbulb",
+                    
+                    "mean-tasmean"
     ),
     
     var_input = c("maximum_temperature",
@@ -82,7 +84,9 @@ tb_vars <-
                   "maximum_wetbulb_temperature",
                   "maximum_wetbulb_temperature",
                   "maximum_wetbulb_temperature",
-                  "maximum_wetbulb_temperature"
+                  "maximum_wetbulb_temperature",
+                  
+                  "average_temperature"
                   
     ),
     
@@ -102,7 +106,9 @@ tb_vars <-
                       "fix_date",
                       "fix_date",
                       "fix_date",
-                      "fix_date"
+                      "fix_date", # already in C
+                      
+                      "fix_date_convert_C"
                       
     ),
     
@@ -122,7 +128,9 @@ tb_vars <-
                    "days-above-28C-wetbulb",
                    "days-above-30C-wetbulb",
                    "days-above-32C-wetbulb",
-                   "ten-hottest-wetbulb-days"
+                   "ten-hottest-wetbulb-days",
+                   
+                   "average-temperature"
       
     )
   )

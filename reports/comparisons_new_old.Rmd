@@ -1,0 +1,345 @@
+---
+title: "Comparisons"
+author: "Carlos Dobler -"
+date: "2022-12-05"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = F,
+                      message = F,
+                      warning = F,
+                      fig.height=9, 
+                      fig.width=8, 
+                      out.width="90%")
+
+source(here::here("scripts/setup.R"))
+library(patchwork)
+
+
+dir_originals <- "/mnt/pers_disk/originals"
+
+# dir.create(dir_originals)
+# "gsutil -m cp gs://wcdi_production/heat_module/*.nc {dir_originals}/" %>% 
+#   str_glue() %>% 
+#   system()
+
+land_pol <- 
+  "/mnt/bucket_mine/misc_data/ne_110m_land/" %>% 
+  st_read() %>%
+  mutate(a = 1) %>% 
+  select(a)
+
+land_rast_0.1 <- 
+  c(st_point(c(-180, -90)),
+  st_point(c(180, 90))) %>%
+  st_bbox() %>%
+  st_set_crs(4326) %>% 
+  st_as_stars(dx = 0.1, dy = 0.1, values = NA) %>% 
+  {st_rasterize(land_pol, .)}
+
+
+
+tb_vars <- 
+  tb_vars %>% 
+  mutate(var_orig = c("sum_days_tasmax_above_32C",
+                      "sum_days_tasmax_above_35C",
+                      "sum_days_tasmax_above_38C",
+                      "mean_tasmax_10day",
+                      "mean_tasmax",
+                      "sum_days_tasmax_below_0C",
+                      
+                      "sum_days_tasmin_above_20C",
+                      "sum_days_tasmin_above_25C",
+                      "mean_tasmin",
+                      "sum_days_tasmin_below_0C",
+                      
+                      "sum_days_wetbulbmax_above_26C",
+                      "sum_days_wetbulbmax_above_28C",
+                      "sum_days_wetbulbmax_above_30C",
+                      "sum_days_wetbulbmax_above_32C",
+                      "mean_wetbulbmax_10day",
+                      
+                      "x"
+                      ))
+
+
+func_maps <- function(i){
+  
+  final_name <- tb_vars$final_name[i]
+  var_orig <- tb_vars$var_orig[i]
+
+  s_old <- 
+    dir_originals %>%
+    list.files(full.names = T) %>% 
+    str_subset(str_glue("annual_{var_orig}.nc")) %>% 
+    read_ncdf(make_time = F) %>% 
+    select(2) %>% 
+    slice(time, c(1,6))
+  
+  if(str_detect(names(s_old), "median")){
+    stat <- "perc50"
+  } else {
+    stat <- "mean"
+  }
+  
+  s_new <- 
+    "/mnt/bucket_mine/results/global_heat_pf/03_mosaicked/" %>% 
+    list.files(full.names = T) %>% 
+    str_subset(str_glue("{final_name}_")) %>% 
+    read_ncdf(var = stat) %>% 
+    st_set_dimensions("warming_levels", values = seq(0.5, 3, by = 0.5)) %>% 
+    slice(warming_levels, c(1,6)) %>% 
+    setNames("v")
+  
+  s_old <- 
+    s_old %>% 
+    st_warp(s_new) %>% 
+    setNames("v") %>%
+    mutate(v = set_units(v, NULL),
+           v = ifelse(v == -99999, NA, v))
+  
+  list(s_new, s_old)
+}
+
+
+
+func_land <- function(listmaps, mask){
+  
+  listmaps[[1]][is.na(mask)] <- NA
+  listmaps[[2]][is.na(mask)] <- NA
+  
+  return(listmaps)
+}
+
+
+
+
+func_plot <- function(foo, vartype){
+  
+  tb <- 
+    foo %>% 
+    as_tibble()
+
+  if(vartype == "days"){
+    tb <- 
+      tb %>% 
+      mutate(v = case_when(v > 100 ~ 100,
+                           v < -100 ~ -100,
+                           TRUE ~ v))
+    
+  } else if(vartype == "temp"){
+    tb <-
+      tb %>% 
+      mutate(v = case_when(v > 8 ~ 8,
+                           v < -8 ~ -8,
+                           TRUE ~ v))
+  }
+  
+  
+  p <- 
+    tb %>% 
+    ggplot(aes(lon, lat, fill = v)) +
+    geom_raster() +
+    facet_wrap(~warming_levels, ncol = 1) +
+    coord_equal() +
+    theme(axis.title = element_blank(),
+          legend.position = "bottom")  
+  
+  
+  if(vartype == "days"){
+    
+    p + 
+      colorspace::scale_fill_binned_diverging("blue-red3",
+                                          na.value = "transparent",
+                                          # n.breaks = 15,
+                                          breaks = c(-100, -80, -50, -30, -15, -5, 5, 15, 30, 50, 80, 100),
+                                          rev = T,
+                                          name = NULL,
+                                          limits = c(-100,100)) +
+      guides(fill = guide_coloursteps(barwidth = 25, 
+                                      barheight = 0.5, 
+                                      ticks = F, 
+                                      show.limits = F,
+                                      even.steps = F))
+    
+    
+  } else if(vartype == "temp"){
+    
+    p + 
+      colorspace::scale_fill_binned_diverging("blue-red3",
+                                          na.value = "transparent",
+                                          breaks = c(-8, -5, -3, -2, -1, 1, 2, 3, 5, 8),
+                                          rev = T,
+                                          name = NULL,
+                                          limits = c(-8,8)) +
+      guides(fill = guide_coloursteps(barwidth = 25, 
+                                      barheight = 0.5, 
+                                      ticks = F, 
+                                      show.limits = F,
+                                      even.steps = F))
+    
+  }
+      
+    
+}
+
+
+```
+
+
+## Days above 32C
+```{r}
+
+m <- func_maps(1)
+
+land_rast_0.2 <- 
+  st_warp(land_rast_0.1, m[[1]] %>% slice(warming_levels, 1))
+
+m <- func_land(m, land_rast_0.2)
+s_diff <- m[[1]] - m[[2]]
+func_plot(s_diff, "days")
+
+
+```
+
+
+## Days above 35C
+```{r}
+
+m <- func_land(func_maps(2), land_rast_0.2)
+s_diff <- m[[1]] - m[[2]]
+func_plot(s_diff, "days")
+
+```
+
+
+## Days above 38C
+```{r}
+
+m <- func_land(func_maps(3), land_rast_0.2)
+s_diff <- m[[1]] - m[[2]]
+func_plot(s_diff, "days")
+
+```
+
+
+## Ten hottest days
+```{r}
+
+m <- func_land(func_maps(4), land_rast_0.2)
+s_diff <- m[[1]] - m[[2]]
+func_plot(s_diff, "temp")
+
+```
+
+
+## Average daytime temperature
+```{r}
+
+m <- func_land(func_maps(5), land_rast_0.2)
+s_diff <- m[[1]] - m[[2]]
+func_plot(s_diff, "temp")
+
+```
+
+
+## Freezing days
+```{r}
+
+m <- func_land(func_maps(6), land_rast_0.2)
+s_diff <- m[[1]] - m[[2]]
+func_plot(s_diff, "days")
+
+```
+
+
+## Nights above 20C
+```{r}
+
+m <- func_land(func_maps(7), land_rast_0.2)
+s_diff <- m[[1]] - m[[2]]
+func_plot(s_diff, "days")
+
+```
+
+
+## Nights above 25C
+```{r}
+
+m <- func_land(func_maps(8), land_rast_0.2)
+s_diff <- m[[1]] - m[[2]]
+func_plot(s_diff, "days")
+
+```
+
+
+## Average nightime temperature
+```{r}
+
+m <- func_land(func_maps(9), land_rast_0.2)
+s_diff <- m[[1]] - m[[2]]
+func_plot(s_diff, "temp")
+
+```
+
+
+## Frost nights
+```{r}
+
+m <- func_land(func_maps(10), land_rast_0.2)
+s_diff <- m[[1]] - m[[2]]
+func_plot(s_diff, "days")
+
+```
+
+
+## Days above 26C wetbulb
+```{r}
+
+m <- func_land(func_maps(11), land_rast_0.2)
+s_diff <- m[[1]] - m[[2]]
+func_plot(s_diff, "days")
+
+```
+
+
+## Days above 28C wetbulb
+```{r}
+
+m <- func_land(func_maps(12), land_rast_0.2)
+s_diff <- m[[1]] - m[[2]]
+func_plot(s_diff, "days")
+
+```
+
+
+## Days above 30C wetbulb
+```{r}
+
+m <- func_land(func_maps(13), land_rast_0.2)
+s_diff <- m[[1]] - m[[2]]
+func_plot(s_diff, "days")
+
+```
+
+
+## Days above 32C wetbulb
+```{r}
+
+m <- func_land(func_maps(14), land_rast_0.2)
+s_diff <- m[[1]] - m[[2]]
+func_plot(s_diff, "days")
+
+```
+
+
+## Ten hottest wetbulb days
+```{r}
+
+m <- func_land(func_maps(15), land_rast_0.2)
+s_diff <- m[[1]] - m[[2]]
+func_plot(s_diff, "temp")
+
+```
+

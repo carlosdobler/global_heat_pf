@@ -1,5 +1,5 @@
 ---
-title: "Wetbulb temp exhibits"
+title: "Minimum heat exhibits"
 author: "Carlos Dobler -"
 date: "2022-11-17"
 output: github_document
@@ -13,10 +13,11 @@ knitr::opts_chunk$set(echo = F,
                       fig.width=9, 
                       out.width="100%")
 
+
 source(here::here("scripts/setup.R"))
 library(patchwork)
 
-var_input <- "maximum_wetbulb_temperature"
+var_input <- "minimum_temperature"
 
 derived_vars <- 
   tb_vars %>% 
@@ -76,13 +77,13 @@ fn_plot <- function(x1, y1, ...){
 ```
 
 
-## Days above 26C wetbulb
+## Days above 20C
 ```{r}
 
 s <- 
   dir_results %>% 
   list.files(full.names = T) %>%
-  str_subset(derived_vars[1]) %>% 
+  str_subset(str_glue("{derived_vars[1]}_")) %>% 
   read_ncdf(var = "mean")
 
 land_rast_0.2 <- 
@@ -97,13 +98,14 @@ pmap(windows, fn_plot) %>%
 ```
 
 
-## Days above 28C wetbulb
+## Days above 25C
+
 ```{r}
 
 s <- 
   dir_results %>% 
   list.files(full.names = T) %>%
-  str_subset(derived_vars[2]) %>% 
+  str_subset(str_glue("{derived_vars[2]}_")) %>% 
   read_ncdf(var = "mean")
 
 s[is.na(land_rast_0.2)] <- NA
@@ -115,13 +117,14 @@ pmap(windows, fn_plot) %>%
 ```
 
 
-## Days above 30C wetbulb
+## Nighttime temperature
+
 ```{r}
 
 s <- 
   dir_results %>% 
   list.files(full.names = T) %>%
-  str_subset(derived_vars[3]) %>% 
+  str_subset(str_glue("{derived_vars[3]}_")) %>% 
   read_ncdf(var = "mean")
 
 s[is.na(land_rast_0.2)] <- NA
@@ -133,13 +136,14 @@ pmap(windows, fn_plot) %>%
 ```
 
 
-## Days above 32C wetbulb
+## Days below 0C
+
 ```{r}
 
 s <- 
   dir_results %>% 
   list.files(full.names = T) %>%
-  str_subset(derived_vars[4]) %>% 
+  str_subset(str_glue("{derived_vars[4]}_")) %>% 
   read_ncdf(var = "mean")
 
 s[is.na(land_rast_0.2)] <- NA
@@ -150,20 +154,3 @@ pmap(windows, fn_plot) %>%
 
 ```
 
-
-## Ten hottest wetbulb days
-```{r}
-
-s <- 
-  dir_results %>% 
-  list.files(full.names = T) %>%
-  str_subset(derived_vars[5]) %>% 
-  read_ncdf(var = "mean")
-
-s[is.na(land_rast_0.2)] <- NA
-
-pmap(windows, fn_plot) %>% 
-  wrap_plots(ncol = 1)
-
-
-```

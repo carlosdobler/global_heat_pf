@@ -367,102 +367,102 @@ walk(derived_vars, function(derived_vars_){
 
 
 
-
-
-
-
-
-
-
-a <- seq(1,0, by = -0.05)[6]
-b <- seq(1,0, by = -0.05)[2]
-
-d <- sum(c(a,b)^2)
-
-a^2/d
-b^2/d
-
-(a^2/d) + (b^2/d)
-
-
-
-a <- (seq(1,0, by = -0.05)^2)[6]
-b <- (seq(1,0, by = -0.05)^2)[2]
-
-d <- sum(a,b)
-
-(a/d) + (b/d)
-
-
-
-wl <- 1
-v <- "mean"
-
-s %>% 
-  select(v) %>% 
-  slice(warming_level, wl) %>% 
-  as_tibble() %>% 
-  rename("v" = 3) %>% 
-  ggplot(aes(x,y,fill = v)) +
-  geom_raster() +
-  colorspace::scale_fill_continuous_sequential("Plasma", na.value = "transparent", rev = F) +
-  coord_equal() +
-  theme(axis.title = element_blank())
-
-# NAM
-s %>% 
-  select(v) %>% 
-  slice(warming_level, wl) %>% 
-  as_tibble() %>% 
-  rename("v" = 3) %>% 
-  ggplot(aes(x,y,fill = v)) +
-  geom_raster() +
-  colorspace::scale_fill_continuous_sequential("Plasma", na.value = "transparent", rev = F) +
-  coord_equal(xlim = c(-130, -70), ylim = c(10,55)) +
-  theme(axis.title = element_blank())
-
-# SAM
-s %>% 
-  select(v) %>% 
-  slice(warming_level, wl) %>%   
-  as_tibble() %>% 
-  rename("v" = 3) %>% 
-  ggplot(aes(x,y,fill = v)) +
-  geom_raster() +
-  colorspace::scale_fill_continuous_sequential("Plasma", na.value = "transparent", rev = F) +
-  coord_equal(xlim = c(-100, -30), ylim = c(-30,25)) +
-  theme(axis.title = element_blank())
-
-# AFR
-s %>% 
-  select(v) %>% 
-  slice(warming_level, wl) %>% 
-  as_tibble() %>% 
-  rename("v" = 3) %>% 
-  ggplot(aes(x,y,fill = v)) +
-  geom_raster() +
-  colorspace::scale_fill_continuous_sequential("Plasma", na.value = "transparent", rev = F) +
-  coord_equal(xlim = c(-20, 55), ylim = c(0,50)) +
-  theme(axis.title = element_blank())
-
-# CAS
-mos %>% 
-  slice(stats, 1) %>% 
-  as_tibble() %>% 
-  rename("v" = 3) %>% 
-  ggplot(aes(x,y,fill = v)) +
-  geom_raster() +
-  colorspace::scale_fill_continuous_sequential("Plasma", na.value = "transparent", rev = F) +
-  coord_equal(xlim = c(25, 85), ylim = c(15,70)) +
-  theme(axis.title = element_blank())
-
-# AUS
-mos %>% 
-  slice(stats, 1) %>% 
-  as_tibble() %>% 
-  rename("v" = 3) %>% 
-  ggplot(aes(x,y,fill = v)) +
-  geom_raster() +
-  colorspace::scale_fill_continuous_sequential("Plasma", na.value = "transparent", rev = F) +
-  coord_equal(xlim = c(90, 170), ylim = c(-50,10)) +
-  theme(axis.title = element_blank())
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# a <- seq(1,0, by = -0.05)[6]
+# b <- seq(1,0, by = -0.05)[2]
+# 
+# d <- sum(c(a,b)^2)
+# 
+# a^2/d
+# b^2/d
+# 
+# (a^2/d) + (b^2/d)
+# 
+# 
+# 
+# a <- (seq(1,0, by = -0.05)^2)[6]
+# b <- (seq(1,0, by = -0.05)^2)[2]
+# 
+# d <- sum(a,b)
+# 
+# (a/d) + (b/d)
+# 
+# 
+# 
+# wl <- 1
+# v <- "mean"
+# 
+# s %>% 
+#   select(v) %>% 
+#   slice(warming_level, wl) %>% 
+#   as_tibble() %>% 
+#   rename("v" = 3) %>% 
+#   ggplot(aes(x,y,fill = v)) +
+#   geom_raster() +
+#   colorspace::scale_fill_continuous_sequential("Plasma", na.value = "transparent", rev = F) +
+#   coord_equal() +
+#   theme(axis.title = element_blank())
+# 
+# # NAM
+# s %>% 
+#   select(v) %>% 
+#   slice(warming_level, wl) %>% 
+#   as_tibble() %>% 
+#   rename("v" = 3) %>% 
+#   ggplot(aes(x,y,fill = v)) +
+#   geom_raster() +
+#   colorspace::scale_fill_continuous_sequential("Plasma", na.value = "transparent", rev = F) +
+#   coord_equal(xlim = c(-130, -70), ylim = c(10,55)) +
+#   theme(axis.title = element_blank())
+# 
+# # SAM
+# s %>% 
+#   select(v) %>% 
+#   slice(warming_level, wl) %>%   
+#   as_tibble() %>% 
+#   rename("v" = 3) %>% 
+#   ggplot(aes(x,y,fill = v)) +
+#   geom_raster() +
+#   colorspace::scale_fill_continuous_sequential("Plasma", na.value = "transparent", rev = F) +
+#   coord_equal(xlim = c(-100, -30), ylim = c(-30,25)) +
+#   theme(axis.title = element_blank())
+# 
+# # AFR
+# s %>% 
+#   select(v) %>% 
+#   slice(warming_level, wl) %>% 
+#   as_tibble() %>% 
+#   rename("v" = 3) %>% 
+#   ggplot(aes(x,y,fill = v)) +
+#   geom_raster() +
+#   colorspace::scale_fill_continuous_sequential("Plasma", na.value = "transparent", rev = F) +
+#   coord_equal(xlim = c(-20, 55), ylim = c(0,50)) +
+#   theme(axis.title = element_blank())
+# 
+# # CAS
+# mos %>% 
+#   slice(stats, 1) %>% 
+#   as_tibble() %>% 
+#   rename("v" = 3) %>% 
+#   ggplot(aes(x,y,fill = v)) +
+#   geom_raster() +
+#   colorspace::scale_fill_continuous_sequential("Plasma", na.value = "transparent", rev = F) +
+#   coord_equal(xlim = c(25, 85), ylim = c(15,70)) +
+#   theme(axis.title = element_blank())
+# 
+# # AUS
+# mos %>% 
+#   slice(stats, 1) %>% 
+#   as_tibble() %>% 
+#   rename("v" = 3) %>% 
+#   ggplot(aes(x,y,fill = v)) +
+#   geom_raster() +
+#   colorspace::scale_fill_continuous_sequential("Plasma", na.value = "transparent", rev = F) +
+#   coord_equal(xlim = c(90, 170), ylim = c(-50,10)) +
+#   theme(axis.title = element_blank())
