@@ -224,6 +224,7 @@ land <-
 # loop through variables
 walk(derived_vars, function(derived_vars_){
   
+  print(str_glue(" "))
   print(str_glue("Mosaicking {derived_vars_}"))
   
   l_mos_wl <- 
@@ -349,7 +350,6 @@ walk(derived_vars, function(derived_vars_){
   
   
   print(str_glue("  Saving"))
-  print(str_glue(" "))
   
   # save as nc
   
@@ -358,8 +358,15 @@ walk(derived_vars, function(derived_vars_){
     filter(var_derived == derived_vars_) %>% 
     pull(final_name)
   
+  file_name <- str_glue("/mnt/bucket_mine/results/global_heat_pf/03_mosaicked/{f_name}_v01.nc")
+  
+  if(file.exists(file_name)){
+    file.remove(file_name)
+    print(str_glue("   (deleting previous file)"))
+  }
+  
   fn_write_nc_wtime_wvars(s, 
-                          str_glue("/mnt/bucket_mine/results/global_heat_pf/03_mosaicked/{f_name}_v01.nc"))
+                          file_name)
   
   
   

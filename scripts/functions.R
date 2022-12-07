@@ -60,8 +60,8 @@ fn_data_table <- function(vari){
         
         dd %>% 
           list.files() %>%
-          .[str_length(.) > 80] %>% 
-          str_subset(".nc$") %>% 
+          str_subset(".nc$") %>%
+          str_subset(".*_[:digit:]*-[:digit:]*.nc") %>% 
           
           map_dfr(function(d){
             

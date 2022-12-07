@@ -20,8 +20,8 @@ library(patchwork)
 dir_originals <- "/mnt/pers_disk/originals"
 
 # dir.create(dir_originals)
-# "gsutil -m cp gs://wcdi_production/heat_module/*.nc {dir_originals}/" %>% 
-#   str_glue() %>% 
+# "gsutil -m cp gs://wcdi_production/heat_module/*.nc {dir_originals}/" %>%
+#   str_glue() %>%
 #   system()
 
 land_pol <- 
@@ -60,7 +60,7 @@ tb_vars <-
                       "sum_days_wetbulbmax_above_32C",
                       "mean_wetbulbmax_10day",
                       
-                      "x"
+                      "mean_tas"
                       ))
 
 
@@ -343,3 +343,12 @@ func_plot(s_diff, "temp")
 
 ```
 
+
+## Average temperature
+```{r}
+
+m <- func_land(func_maps(16), land_rast_0.2)
+s_diff <- m[[1]] - m[[2]]
+func_plot(s_diff, "temp")
+
+```

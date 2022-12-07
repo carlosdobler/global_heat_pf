@@ -62,3 +62,7 @@ Carlos Dobler -
 ## Ten hottest wetbulb days
 
 <img src="comparisons_new_old_files/figure-gfm/unnamed-chunk-15-1.png" width="90%" />
+
+## Average temperature
+
+<img src="comparisons_new_old_files/figure-gfm/unnamed-chunk-16-1.png" width="90%" />

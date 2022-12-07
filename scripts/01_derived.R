@@ -16,7 +16,7 @@ for(dom in doms){
   
   # MODELS TABLE ----------------------------------------------------------------------------------
   
-  tb_models <- 
+  tb_models <-
     fn_models_table(tb_files)
   
   
@@ -25,9 +25,11 @@ for(dom in doms){
   
   for(i in seq_len(nrow(tb_models))){
     
+    print(str_glue(" "))
+    print(str_glue("PROCESSING model {i} / {nrow(tb_models)}"))
+    
     gcm_ <- tb_models$gcm[i]
     rcm_ <- tb_models$rcm[i]
-    
     
     
     ## DOWNLOAD RAW DATA --------------------------------------------------------------------------
@@ -35,12 +37,20 @@ for(dom in doms){
     print(str_glue("Downloading raw data [{rcm_}] [{gcm_}]"))
     
     dir_raw_data <- str_glue("{dir_pers_disk}/raw_data")
+    
+    if(dir.exists(dir_raw_data)){
+      print(str_glue("   (previous dir_raw_data deleted)"))
+      unlink(dir_raw_data, recursive = T)
+    } 
+    
     dir.create(dir_raw_data)
     
-    tb_files %>% 
+    tb_files_mod <- 
+      tb_files %>% 
       filter(gcm == gcm_,
-             rcm == rcm_) %>% 
+             rcm == rcm_) 
       
+    tb_files_mod %>% 
       future_pwalk(function(loc, file, ...){
         
         loc_ <-
@@ -53,22 +63,21 @@ for(dom in doms){
         
       })
     
+    print(str_glue("   Done: {nrow(tb_files_mod)} files downloaded"))
     
     
     ## CDO PRE-PROCESS ----------------------------------------------------------------------------
     
     print(str_glue("Processing with CDO [{rcm_}] [{gcm_}]"))
     
-    tb_files %>% 
-      filter(gcm == gcm_,
-             rcm == rcm_) %>% 
-      
+    tb_files_mod %>%
       future_pwalk(function(file, t_i, t_f, ...){
         
         yr_i <- year(as_date(t_i))
         yr_f <- year(as_date(t_f))
         
         f <- str_glue("{dir_raw_data}/{file}")
+        
         
         
         if(str_detect(var_input, "wetbulb")){
@@ -104,20 +113,24 @@ for(dom in doms){
           
           file.remove(f)
           
-          # print(t_i)
-          
-          
         }
         
         
       })
     
     
-    dir_raw_data %>% 
+    bad_remnants <- 
+      dir_raw_data %>% 
       list.files(full.names = T) %>% 
-      str_subset("yrsplit") %>% 
-      walk(file.remove)
-
+      str_subset("yrsplit")
+    
+    if(length(bad_remnants) > 0){
+      print(str_glue("   ({length(bad_remnants)} bad files - deleted)"))
+      
+      bad_remnants %>% 
+        walk(file.remove)
+    }
+    
     
     ff <-
       dir_raw_data %>%
@@ -125,6 +138,12 @@ for(dom in doms){
       str_flatten(" ")
     
     dir_cat <- "/mnt/pers_disk/cat"
+    
+    if(dir.exists(dir_cat)){
+      print(str_glue("   (previous dir_cat deleted)"))
+      unlink(dir_cat, recursive = T)
+    }
+    
     dir.create(dir_cat)
     
     system(str_glue("cdo cat {ff} {dir_cat}/cat.nc"),
@@ -136,12 +155,32 @@ for(dom in doms){
       
       print(str_glue("   {derived_vars_}"))
       
+      old_file <- 
+        dir_derived %>% 
+        list.files(full.names = T) %>% 
+        str_subset(dom) %>% 
+        str_subset(derived_vars_) %>% 
+        str_subset(gcm_) %>% 
+        str_subset(rcm_)
+      
+      if(length(old_file) > 0){
+        file.remove(old_file)
+        print(str_glue("      (replacing: {length(old_file)} file)"))
+      }
+      
       fn_cdo(derived_vars_)
       
+      time_steps <- 
+        str_glue("{dir_derived}/{dom}_{derived_vars_}_yr_{rcm_}_{gcm_}.nc") %>% 
+        read_ncdf(proxy = T, make_time = F) %>%
+        suppressMessages() %>% 
+        suppressWarnings() %>% 
+        st_get_dimension_values("time") %>% 
+        length()
       
-    }#,
-    #.options = furrr_options(seed = NULL))
-    )
+      print(str_glue("      Done: new file with {time_steps} timesteps"))
+      
+    })
     
     unlink(dir_cat, recursive = T)
     

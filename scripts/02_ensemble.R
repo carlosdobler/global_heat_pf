@@ -14,8 +14,6 @@ for(dom in doms){
   # LOOP THROUGH VARS
   for(derived_vars_ in derived_vars){
     
-    # derived_vars_ <- derived_vars[6]
-    
     print(str_glue(" "))
     print(str_glue("Processing {derived_vars_}"))
     
@@ -40,6 +38,7 @@ for(dom in doms){
           read_ncdf(str_glue("{dir_derived}/{f}"), 
                     proxy = F, make_time = F) %>% 
             suppressMessages() %>% 
+            suppressWarnings() %>% 
             setNames("v") %>% 
             mutate(v = set_units(v, degC))
           
@@ -47,6 +46,7 @@ for(dom in doms){
           read_ncdf(str_glue("{dir_derived}/{f}"), 
                     proxy = F) %>% 
             suppressMessages() %>% 
+            suppressWarnings() %>% 
             setNames("v") %>% 
             mutate(v = set_units(v, degC))
           
@@ -54,12 +54,14 @@ for(dom in doms){
           read_ncdf(str_glue("{dir_derived}/{f}"), 
                     proxy = F, make_time = F) %>% 
             suppressMessages() %>% 
+            suppressWarnings() %>% 
             setNames("v")
           
         } else if(change_import == "nothing"){
           read_ncdf(str_glue("{dir_derived}/{f}"), 
                     proxy = F) %>% 
             suppressMessages() %>% 
+            suppressWarnings() %>% 
             setNames("v")
           
         }
@@ -92,6 +94,23 @@ for(dom in doms){
         drop_units()
       })
     
+    print(str_glue("Imported:"))
+    
+    walk2(l_s, ff, function(s, f){
+      
+      range_time <- 
+        s %>% 
+        st_get_dimension_values("time") %>% 
+        range()
+      
+      f <- 
+        f %>% 
+        str_extract("(?<=yr_)[:alnum:]*_[:graph:]*(?=\\.nc)")
+      
+      print(str_glue("   Date range {f}:     \t{range_time[1]} - {range_time[2]}"))
+      
+    })
+    
     
     
     
@@ -122,18 +141,24 @@ for(dom in doms){
                 filter(time >= 1971,
                        time <= 2000)
               
+              # print(str_glue("   1971-2000"))
+              
             } else {
               
               thres_val <-
                 thresholds %>%
                 filter(str_detect(Model, str_glue("{gcm_}$"))) %>% 
-                filter(wl == wl_) %>% 
-                pull(value)
+                filter(wl == wl_)# %>%
+                # pull(value)
               
-              s %>% 
-                filter(time >= thres_val - 10,
-                       time <= thres_val + 10)
+              s <- 
+                s %>% 
+                filter(time >= thres_val$value - 10,
+                       time <= thres_val$value + 10)
               
+              print(str_glue("   {gcm_}: {thres_val$Model}: {thres_val$value}"))
+              
+              return(s)
             }
             
           })
@@ -160,11 +185,22 @@ for(dom in doms){
     
     
     # SAVE
-    fn_write_nc_wtime_wvars(
-      s_result,
+    
+    print(str_glue("Saving result"))
+    
+    res_filename <- 
       str_glue(
         "{dir_bucket_mine}/results/global_heat_pf/02_ensembled/{dom}_{derived_vars_}_ensemble.nc"
       )
+    
+    if(file.exists(res_filename)){
+      file.remove(res_filename)
+      print(str_glue("\t (previous file deleted)"))
+    }
+    
+    fn_write_nc_wtime_wvars(
+      s_result,
+      res_filename
     )
     
   }
