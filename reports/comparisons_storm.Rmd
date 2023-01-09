@@ -1,0 +1,407 @@
+---
+title: "Comparisons: Change storm occurrence"
+author: "Carlos Dobler -"
+date: "2022-12-29"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = F,
+                      message = F,
+                      warning = F,
+                      fig.height=9, 
+                      fig.width=8, 
+                      out.width="90%")
+
+source(here::here("scripts/setup.R"))
+library(patchwork)
+
+
+dir_originals <- "/mnt/pers_disk/originals"
+
+# dir.create(dir_originals)
+# "gsutil -m cp gs://wcdi_production/water_module/rcm_regcm_remo/*.nc {dir_originals}/" %>%
+#   str_glue() %>%
+#   system()
+
+land_pol <- 
+  "/mnt/bucket_mine/misc_data/ne_110m_land/" %>% 
+  st_read() %>%
+  mutate(a = 1) %>% 
+  select(a)
+
+land_rast_0.1 <- 
+  c(st_point(c(-180, -90)),
+  st_point(c(180, 90))) %>%
+  st_bbox() %>%
+  st_set_crs(4326) %>% 
+  st_as_stars(dx = 0.1, dy = 0.1, values = NA) %>% 
+  {st_rasterize(land_pol, .)}
+
+
+s_old <- 
+  dir_originals %>%
+  list.files(full.names = T) %>% 
+  str_subset("pr_100yrstorm") %>% 
+  read_ncdf(make_time = F) %>% 
+  select(2)
+
+s_new <- 
+    "/mnt/bucket_mine/results/global_heat_pf/03_mosaicked/" %>% 
+    list.files(full.names = T) %>% 
+    str_subset("storm-precip") %>% 
+    read_ncdf() %>% 
+    st_set_dimensions("warming_levels", values = seq(0.5, 3, by = 0.5)) %>% 
+    setNames("v")
+
+s_old <- 
+  s_old %>%
+  drop_units() %>% 
+  st_warp(s_new) %>% 
+  setNames("v") %>%
+  mutate(v = set_units(v, NULL),
+         v = ifelse(v == -99999, NA, v))
+
+
+land_mask <- 
+  st_warp(land_rast_0.1, s_new %>% slice(warming_levels, 1))
+
+
+s_new[is.na(land_mask)] <- NA
+s_old[is.na(land_mask)] <- NA
+
+
+tb <- 
+  bind_rows(
+    s_new %>% 
+      as_tibble() %>% 
+      mutate(version = "new"),
+    
+    s_old %>% 
+      as_tibble() %>% 
+      rename(warming_levels = time) %>% 
+      mutate(version = "old")
+    
+    )
+
+
+
+```
+
+
+
+## Precipitation (levels)
+### WL = 0.5
+```{r}
+
+
+precip_0p5_new <- 
+
+  tb %>% 
+  mutate(v = case_when(v > 200 ~ 200,
+                       TRUE ~ v)) %>% 
+  filter(warming_levels == 0.5) %>% 
+  filter(version == "new") %>% 
+  
+  ggplot(aes(lon, lat, fill = v)) +
+  geom_raster() +
+  coord_equal() +
+    theme(axis.title = element_blank(),
+          legend.position = "bottom") +
+  colorspace::scale_fill_binned_sequential("viridis",
+                                          na.value = "transparent",
+                                          #breaks = c(-8, -5, -3, -2, -1, 1, 2, 3, 5, 8),
+                                          rev = T,
+                                          name = NULL,
+                                          n.breaks = 11) +
+      guides(fill = guide_coloursteps(barwidth = 25, 
+                                      barheight = 0.5, 
+                                      ticks = F#, 
+                                      # show.limits = F,
+                                      # even.steps = F
+                                      )) +
+  labs(title = "New")
+
+
+precip_0p5_old <-
+
+  tb %>% 
+  mutate(v = case_when(v > 800 ~ 800,
+                       TRUE ~ v)) %>% 
+  filter(warming_levels == 0.5) %>% 
+  filter(version == "old") %>% 
+  
+  ggplot(aes(lon, lat, fill = v)) +
+  geom_raster() +
+  coord_equal() +
+  theme(axis.title = element_blank(),
+        legend.position = "bottom") +
+  colorspace::scale_fill_binned_sequential("viridis",
+                                           na.value = "transparent",
+                                           #breaks = c(-8, -5, -3, -2, -1, 1, 2, 3, 5, 8),
+                                           rev = T,
+                                           name = NULL,
+                                           n.breaks = 11) +
+  guides(fill = guide_coloursteps(barwidth = 25, 
+                                  barheight = 0.5, 
+                                  ticks = F#, 
+                                  # show.limits = F,
+                                  # even.steps = F
+  )) +
+  labs(title = "Old")
+
+
+
+wrap_plots(precip_0p5_old, precip_0p5_new, ncol = 1)
+
+```
+
+
+### WL = 3.0
+```{r}
+
+precip_2p0_new <-
+  
+  tb %>% 
+  mutate(v = case_when(v > 50 ~ 50,
+                       v < -50 ~ -50,
+                       TRUE ~ v)) %>%
+  filter(warming_levels == 3.0) %>% 
+  filter(version == "new") %>% 
+  
+  ggplot(aes(lon, lat, fill = v)) +
+  geom_raster() +
+  coord_equal() +
+    theme(axis.title = element_blank(),
+          legend.position = "bottom") +
+  colorspace::scale_fill_binned_diverging("blue-red3",
+                                          na.value = "transparent",
+                                          #breaks = c(-8, -5, -3, -2, -1, 1, 2, 3, 5, 8),
+                                          rev = T,
+                                          name = NULL,
+                                          n.breaks = 11) +
+      guides(fill = guide_coloursteps(barwidth = 25, 
+                                      barheight = 0.5, 
+                                      ticks = F#, 
+                                      # show.limits = F,
+                                      # even.steps = F
+                                      )) +
+  labs(title = "New")
+
+
+precip_2p0_old <-
+
+  tb %>% 
+  mutate(v = case_when(v > 90 ~ 90,
+                       v < -90 ~ -90,
+                       TRUE ~ v)) %>%
+  filter(warming_levels == 3.0) %>% 
+  filter(version == "old") %>% 
+  
+  ggplot(aes(lon, lat, fill = v)) +
+  geom_raster() +
+  coord_equal() +
+    theme(axis.title = element_blank(),
+          legend.position = "bottom") +
+  colorspace::scale_fill_binned_diverging("blue-red3",
+                                          na.value = "transparent",
+                                          #breaks = c(-8, -5, -3, -2, -1, 1, 2, 3, 5, 8),
+                                          rev = T,
+                                          name = NULL,
+                                          n.breaks = 11) +
+      guides(fill = guide_coloursteps(barwidth = 25, 
+                                      barheight = 0.5, 
+                                      ticks = F#, 
+                                      # show.limits = F,
+                                      # even.steps = F
+                                      )) +
+  labs(title = "Old")
+
+
+wrap_plots(precip_2p0_old, precip_2p0_new, ncol = 1)
+
+```
+
+
+
+
+
+## Frequency
+
+### WL = 1.0
+```{r}
+
+s_old <- 
+  dir_originals %>%
+  list.files(full.names = T) %>% 
+  str_subset("rp_100yrstorm") %>% 
+  read_ncdf(make_time = F) %>% 
+  select(2)
+
+s_new <- 
+    "/mnt/bucket_mine/results/global_heat_pf/03_mosaicked/" %>% 
+    list.files(full.names = T) %>% 
+    str_subset("storm-freq") %>% 
+    read_ncdf() %>% 
+    st_set_dimensions("warming_levels", values = seq(0.5, 3, by = 0.5)) %>% 
+    setNames("v")
+
+s_old <- 
+  s_old %>%
+  # drop_units() %>% 
+  st_warp(s_new) %>% 
+  setNames("v") %>%
+  mutate(v = set_units(v, NULL),
+         v = ifelse(v == -99999, NA, v))
+
+
+s_new[is.na(land_mask)] <- NA
+s_old[is.na(land_mask)] <- NA
+
+
+tb <- 
+  bind_rows(
+    s_new %>% 
+      as_tibble() %>% 
+      mutate(version = "new"),
+    
+    s_old %>% 
+      as_tibble() %>% 
+      rename(warming_levels = time) %>% 
+      mutate(version = "old")
+    )
+
+
+
+freq_1p0_new <- 
+
+  tb %>% 
+  mutate(v = case_when(v > 5 ~ 5,
+                       v < -2 ~ -2,
+                       TRUE ~ v)) %>%
+  filter(warming_levels == 1.0) %>% 
+  filter(version == "new") %>% 
+  
+  ggplot(aes(lon, lat, fill = v)) +
+  geom_raster() +
+  coord_equal() +
+    theme(axis.title = element_blank(),
+          legend.position = "bottom") +
+  colorspace::scale_fill_binned_diverging("blue-red3",
+                                          na.value = "transparent",
+                                          #breaks = c(-8, -5, -3, -2, -1, 1, 2, 3, 5, 8),
+                                          rev = T,
+                                          name = NULL,
+                                          n.breaks = 11) +
+      guides(fill = guide_coloursteps(barwidth = 25, 
+                                      barheight = 0.5, 
+                                      ticks = F#, 
+                                      # show.limits = F,
+                                      # even.steps = F
+                                      )) +
+  labs(title = "New")
+
+
+freq_1p0_old <- 
+  
+  tb %>% 
+  mutate(v = case_when(v > 5 ~ 5,
+                       v < -2 ~ -2,
+                       TRUE ~ v)) %>%
+  filter(warming_levels == 1.0) %>% 
+  filter(version == "old") %>% 
+  
+  ggplot(aes(lon, lat, fill = v)) +
+  geom_raster() +
+  coord_equal() +
+    theme(axis.title = element_blank(),
+          legend.position = "bottom") +
+  colorspace::scale_fill_binned_diverging("blue-red3",
+                                          na.value = "transparent",
+                                          #breaks = c(-8, -5, -3, -2, -1, 1, 2, 3, 5, 8),
+                                          rev = T,
+                                          name = NULL,
+                                          n.breaks = 11) +
+      guides(fill = guide_coloursteps(barwidth = 25, 
+                                      barheight = 0.5, 
+                                      ticks = F#, 
+                                      # show.limits = F,
+                                      # even.steps = F
+                                      )) +
+  labs(title = "Old")
+
+
+wrap_plots(freq_1p0_old, freq_1p0_new, ncol = 1)
+
+```
+
+
+
+### WL = 3.0
+```{r}
+
+freq_2p0_new <- 
+
+  tb %>% 
+  mutate(v = case_when(v > 5 ~ 5,
+                       v < -2 ~ -2,
+                       TRUE ~ v)) %>%
+  filter(warming_levels == 3.0) %>% 
+  filter(version == "new") %>% 
+  
+  ggplot(aes(lon, lat, fill = v)) +
+  geom_raster() +
+  coord_equal() +
+    theme(axis.title = element_blank(),
+          legend.position = "bottom") +
+  colorspace::scale_fill_binned_diverging("blue-red3",
+                                          na.value = "transparent",
+                                          #breaks = c(-8, -5, -3, -2, -1, 1, 2, 3, 5, 8),
+                                          rev = T,
+                                          name = NULL,
+                                          n.breaks = 11) +
+      guides(fill = guide_coloursteps(barwidth = 25, 
+                                      barheight = 0.5, 
+                                      ticks = F#, 
+                                      # show.limits = F,
+                                      # even.steps = F
+                                      )) +
+  labs(title = "New")
+
+
+freq_2p0_old <- 
+  
+  tb %>% 
+  mutate(v = case_when(v > 5 ~ 5,
+                       v < -2 ~ -2,
+                       TRUE ~ v)) %>%
+  filter(warming_levels == 3.0) %>% 
+  filter(version == "old") %>% 
+  
+  ggplot(aes(lon, lat, fill = v)) +
+  geom_raster() +
+  coord_equal() +
+    theme(axis.title = element_blank(),
+          legend.position = "bottom") +
+  colorspace::scale_fill_binned_diverging("blue-red3",
+                                          na.value = "transparent",
+                                          #breaks = c(-8, -5, -3, -2, -1, 1, 2, 3, 5, 8),
+                                          rev = T,
+                                          name = NULL,
+                                          n.breaks = 11) +
+      guides(fill = guide_coloursteps(barwidth = 25, 
+                                      barheight = 0.5, 
+                                      ticks = F#, 
+                                      # show.limits = F,
+                                      # even.steps = F
+                                      )) +
+  labs(title = "Old")
+
+
+wrap_plots(freq_2p0_old, freq_2p0_new, ncol = 1)
+
+```
+
+
+
+

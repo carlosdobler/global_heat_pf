@@ -2,33 +2,33 @@
 
 # TILING
 
-# CREATE LAND LAYER
-
-c(st_point(c(-180, -90)),
-  st_point(c(180, 90))) %>%
-  st_bbox() %>%
-  st_set_crs(4326) -> box_reference
-
-box_reference %>%
-  st_as_stars(dx = 0.05, dy = 0.05, values = -9999) -> rast_reference_0.05
-
-box_reference %>%
-  st_as_stars(dx = 0.2, dy = 0.2, values = -9999) -> rast_reference_0.2
-
-str_glue("{dir_bucket_mine}/misc_data/ne_50m_land/ne_50m_land.shp") %>%
-  st_read(quiet = T) %>%
-  mutate(a = 1) %>%
-  select(a) %>%
-  st_rasterize(rast_reference_0.05) -> land
-
-land %>%
-  st_warp(rast_reference_0.2, use_gdal = T, method = "mode") %>%
-  suppressWarnings() %>% 
-  setNames("a") %>%
-  mutate(a = ifelse(a == -9999, NA, 1)) -> land
-
-land %>%
-  st_set_dimensions(c(1,2), names = c("lon", "lat")) -> land
+# # CREATE LAND LAYER
+# 
+# c(st_point(c(-180, -90)),
+#   st_point(c(180, 90))) %>%
+#   st_bbox() %>%
+#   st_set_crs(4326) -> box_reference
+# 
+# box_reference %>%
+#   st_as_stars(dx = 0.05, dy = 0.05, values = -9999) -> rast_reference_0.05
+# 
+# box_reference %>%
+#   st_as_stars(dx = 0.2, dy = 0.2, values = -9999) -> rast_reference_0.2
+# 
+# str_glue("{dir_bucket_mine}/misc_data/ne_50m_land/ne_50m_land.shp") %>%
+#   st_read(quiet = T) %>%
+#   mutate(a = 1) %>%
+#   select(a) %>%
+#   st_rasterize(rast_reference_0.05) -> land
+# 
+# land %>%
+#   st_warp(rast_reference_0.2, use_gdal = T, method = "mode") %>%
+#   suppressWarnings() %>% 
+#   setNames("a") %>%
+#   mutate(a = ifelse(a == -9999, NA, 1)) -> land
+# 
+# land %>%
+#   st_set_dimensions(c(1,2), names = c("lon", "lat")) -> land
 
 {
   # if(dom == "AUS"){
@@ -69,14 +69,14 @@ land %>%
 
 # OBTAIN TILES' LIMITS
 
-f %>% 
-  read_ncdf(proxy = F, 
-            ncsub = cbind(start = c(1,1,1),
-                          count = c(NA,NA,1))) %>% 
-  adrop() %>% 
-  drop_units() %>% 
-  setNames("d") %>% 
-  mutate(d = ifelse(is.na(d), NA, 1)) -> s_proxy
+# f %>% 
+#   read_ncdf(proxy = F, 
+#             ncsub = cbind(start = c(1,1,1),
+#                           count = c(NA,NA,1))) %>% 
+#   adrop() %>% 
+#   drop_units() %>% 
+#   setNames("d") %>% 
+#   mutate(d = ifelse(is.na(d), NA, 1)) -> s_proxy
 
 
 # size of chunk (pixels in each dim)
@@ -113,50 +113,52 @@ split(d_lat,
 # *****************************************************************************
 
 
-# GENERATE TABLE W/ POLYGONS
+# # GENERATE TABLE W/ POLYGONS
+# 
+# imap(lon_chunks, function(lon_ch, lon_i){
+#   imap(lat_chunks, function(lat_ch, lat_i){
+#     
+#     s_proxy %>%
+#       slice(lon, lon_ch[1]:lon_ch[2]) %>%
+#       slice(lat, lat_ch[1]:lat_ch[2]) -> s_proxy_sub
+#     
+#     st_warp(land,
+#             s_proxy_sub) %>% 
+#       
+#       # for cases where there is land but no data
+#       c(s_proxy_sub) %>% 
+#       mutate(a = ifelse(is.na(d), NA, a)) %>% 
+#       select(a) -> land_rast_sub
+#     
+#     land_rast_sub %>% 
+#       pull(1) %>% 
+#       sum(na.rm = T) -> total_cells_land
+#     
+#     s_proxy_sub %>% 
+#       st_bbox() %>% 
+#       round(1) %>% 
+#       st_as_sfc() %>% 
+#       st_sf() %>% 
+#       mutate(cells_land = total_cells_land,
+#              lon_ch = lon_i,
+#              lat_ch = lat_i)
+#     
+#   }) %>% 
+#     bind_rows()
+#   
+# }) %>% 
+#   bind_rows() -> pols
+# 
+# 
+# pols %>% 
+#   filter(cells_land > 0) %>% 
+#   mutate(r = row_number() %>% str_pad(2, "left", "0")) -> chunks_ind
+# 
+# 
+# rm(f, #s_proxy, 
+#    d_lon, n_lon, d_lat, n_lat, sz,
+#    rast_reference_0.05, rast_reference_0.2, box_reference, 
+#    #land,
+#    pols)
 
-imap(lon_chunks, function(lon_ch, lon_i){
-  imap(lat_chunks, function(lat_ch, lat_i){
-    
-    s_proxy %>%
-      slice(lon, lon_ch[1]:lon_ch[2]) %>%
-      slice(lat, lat_ch[1]:lat_ch[2]) -> s_proxy_sub
-    
-    st_warp(land,
-            s_proxy_sub) %>% 
-      
-      # for cases where there is land but no data
-      c(s_proxy_sub) %>% 
-      mutate(a = ifelse(is.na(d), NA, a)) %>% 
-      select(a) -> land_rast_sub
-    
-    land_rast_sub %>% 
-      pull(1) %>% 
-      sum(na.rm = T) -> total_cells_land
-    
-    s_proxy_sub %>% 
-      st_bbox() %>% 
-      round(1) %>% 
-      st_as_sfc() %>% 
-      st_sf() %>% 
-      mutate(cells_land = total_cells_land,
-             lon_ch = lon_i,
-             lat_ch = lat_i)
-    
-  }) %>% 
-    bind_rows()
-  
-}) %>% 
-  bind_rows() -> pols
-
-
-pols %>% 
-  filter(cells_land > 0) %>% 
-  mutate(r = row_number() %>% str_pad(2, "left", "0")) -> chunks_ind
-
-
-rm(f, #s_proxy, 
-   d_lon, n_lon, d_lat, n_lat, sz,
-   rast_reference_0.05, rast_reference_0.2, box_reference, 
-   #land,
-   pols)
+rm(sz, d_lon, n_lon, d_lat, n_lat)

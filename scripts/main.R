@@ -2,12 +2,14 @@
 var_input <- c("maximum_temperature",
                "minimum_temperature",
                "maximum_wetbulb_temperature",
-               "average_temperature")[4] 
+               "average_temperature",
+               
+               "precipitation")[5] 
 
 
 source("scripts/setup.R")
 source("scripts/functions.R")
-source("scripts/cdo_proc.R")
+# source("scripts/cdo_proc.R")
 
 plan(multicore)
 
@@ -20,7 +22,13 @@ derived_vars <-
   filter(var_input == {{var_input}}) %>% 
   pull(var_derived)
 
+derived_vars = derived_vars[2]
+
+derived_vars_ = derived_vars # *****
+
 doms <- c("SEA", "AUS", "CAS", "WAS", "EAS", "AFR", "EUR", "NAM", "CAM", "SAM")
+
+doms = doms[-7] # *****
 
 wl <- c("0.5", "1.0", "1.5", "2.0", "2.5", "3.0")
 

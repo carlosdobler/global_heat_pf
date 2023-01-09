@@ -13,11 +13,11 @@ dir_bucket_mine <- "/mnt/bucket_mine"
 dir_pers_disk <- "/mnt/pers_disk"
 
 
-str_glue("gcsfuse cmip5_data {dir_bucket_cmip5}") %>% 
-  system()
-
-str_glue("gcsfuse clim_data_reg_useast1 {dir_bucket_mine}") %>% 
-  system()
+# str_glue("gcsfuse cmip5_data {dir_bucket_cmip5}") %>% 
+#   system()
+# 
+# str_glue("gcsfuse clim_data_reg_useast1 {dir_bucket_mine}") %>% 
+#   system()
 
 
 
@@ -65,8 +65,15 @@ tb_vars <-
                     "days-gec-32C-wetbulb",
                     "ten-hottest-days-wetbulb",
                     
-                    "mean-tasmean"
+                    "mean-tasmean",
+                    
+                    # *****************
+                    
+                    "total-precip",
+                    "ninety-wettest-days",
+                    "p98-precip"
     ),
+    
     
     var_input = c("maximum_temperature",
                   "maximum_temperature",
@@ -86,7 +93,13 @@ tb_vars <-
                   "maximum_wetbulb_temperature",
                   "maximum_wetbulb_temperature",
                   
-                  "average_temperature"
+                  "average_temperature",
+                  
+                  # *******************
+                  
+                  "precipitation",
+                  "precipitation",
+                  "precipitation"
                   
     ),
     
@@ -108,7 +121,13 @@ tb_vars <-
                       "fix_date",
                       "fix_date", # already in C
                       
-                      "fix_date_convert_C"
+                      "fix_date_convert_C",
+                      
+                      # ***************
+                      
+                      "convert_mm",
+                      "convert_mm",
+                      "convert_mm"
                       
     ),
     
@@ -130,7 +149,13 @@ tb_vars <-
                    "days-above-32C-wetbulb",
                    "ten-hottest-wetbulb-days",
                    
-                   "average-temperature"
+                   "average-temperature",
+                   
+                   # ******************
+                   
+                   "change-total-annual-precipitation",
+                   "change-90-wettest-days",
+                   "change-hundred-yr-storm"
       
     )
   )

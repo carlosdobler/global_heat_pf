@@ -61,7 +61,7 @@ fn_data_table <- function(vari){
         dd %>% 
           list.files() %>%
           str_subset(".nc$") %>%
-          str_subset(".*_[:digit:]*-[:digit:]*.nc") %>% 
+          str_subset(".*_[:digit:]*-[:digit:]*.nc") %>%
           
           map_dfr(function(d){
             
@@ -110,6 +110,61 @@ fn_data_table <- function(vari){
       str_detect(gcm, "CERFACS", negate = T),
       str_detect(gcm, "CNRM", negate = T)
     )
+  
+  
+  # missing precip files for AFR
+  if(dom == "AFR" & vari == "precipitation"){
+    
+    tb_files <- 
+      
+      dir_remo %>% 
+      list.files() %>%
+      str_subset(".nc$") %>% 
+      str_subset("REMO") %>% 
+      str_subset("HadGEM2") %>% 
+      str_subset("historical") %>%
+      
+      map_dfr(function(d){
+        
+        tibble(file = d) %>%
+          
+          mutate(
+            
+            var = file %>%
+              str_split("_", simplify = T) %>%
+              .[ , 1],
+            
+            gcm = file %>%
+              str_split("_", simplify = T) %>%
+              .[ , 3],
+            
+            rcm = file %>%
+              str_split("_", simplify = T) %>%
+              .[ , 6] %>% 
+              str_split("-", simplify = T) %>% 
+              .[ , 2],
+            
+            t_i = file %>%
+              str_split("_", simplify = T) %>%
+              .[ , 9] %>%
+              str_sub(end = 4) %>% 
+              str_c("0101"),
+            
+            t_f = file %>%
+              str_split("_", simplify = T) %>%
+              .[ , 9] %>%
+              str_sub(end = 4) %>% 
+              str_c("1201"),
+            
+            loc = dir_remo
+            
+          )
+      }) %>% 
+      
+      bind_rows(tb_files)
+    
+    
+  }
   
   return(tb_files)
 }
@@ -282,3 +337,70 @@ fn_write_nc_wtime_wvars <- function(star_to_export, file_name){
   ncdf4::nc_close(ncnew)
   
 }
+
+
+
+
+# *****************
+
+fn_write_nc_derived <- function(array, file_name, dim_lon, dim_lat, dim_time, var_name, var_units = ""){
+  
+  # define dimensions
+  dim_lon <- ncdf4::ncdim_def(name = "lon", 
+                              units = "degrees_east", 
+                              vals = dim_lon)
+  
+  dim_lat <- ncdf4::ncdim_def(name = "lat", 
+                              units = "degrees_north", 
+                              vals = dim_lat)
+  
+  dim_time <- ncdf4::ncdim_def(name = "time", 
+                               units = "days since 1970-01-01", 
+                               vals = dim_time)
+  
+  # define variables
+  vari <- ncdf4::ncvar_def(name = var_name,
+                          units = var_units,
+                          dim = list(dim_lon, dim_lat, dim_time), 
+                          missval = -999999)
+  
+  
+  # create file
+  ncnew <- ncdf4::nc_create(filename = file_name, 
+                            vars = vari,
+                            force_v4 = TRUE)
+  
+  # write data
+  ncdf4::ncvar_put(nc = ncnew, 
+                   varid = vari, 
+                   vals = array)
+  
+  ncdf4::nc_close(ncnew)
+  
+}
+
+
+
+
+# ***********
+
+fn_save_nc <- function(res_filename, s_result){
+  
+  if(file.exists(res_filename)){
+    file.remove(res_filename)
+    print(str_glue("\t (previous file deleted)"))
+  }
+  
+  fn_write_nc_wtime_wvars(
+    s_result,
+    res_filename
+  )
+  
+  
+  
+}
+
+
+
+
+

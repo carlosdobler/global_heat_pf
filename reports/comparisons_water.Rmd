@@ -1,0 +1,177 @@
+---
+title: "Comparisons: Water"
+author: "Carlos Dobler -"
+date: "2022-12-29"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = F,
+                      message = F,
+                      warning = F,
+                      fig.height=12, 
+                      fig.width=8, 
+                      out.width="90%")
+
+source(here::here("scripts/setup.R"))
+library(patchwork)
+
+
+dir_originals <- "/mnt/pers_disk/originals"
+
+# dir.create(dir_originals)
+# "gsutil -m cp gs://wcdi_production/water_module/rcm_regcm_remo/*.nc {dir_originals}/" %>%
+#   str_glue() %>%
+#   system()
+
+land_pol <- 
+  "/mnt/bucket_mine/misc_data/ne_110m_land/" %>% 
+  st_read() %>%
+  mutate(a = 1) %>% 
+  select(a)
+
+land_rast_0.1 <- 
+  c(st_point(c(-180, -90)),
+  st_point(c(180, 90))) %>%
+  st_bbox() %>%
+  st_set_crs(4326) %>% 
+  st_as_stars(dx = 0.1, dy = 0.1, values = NA) %>% 
+  {st_rasterize(land_pol, .)}
+
+
+
+tb_vars <-
+  tb_vars %>%
+  filter(var_input == "precipitation") %>% 
+  .[1:2,] %>% 
+  mutate(var_orig = c("pr_yrsum", 
+                      "pr_90runsum_max"))
+
+
+func_maps <- function(i){
+  
+  final_name <- tb_vars$final_name[i]
+  var_orig <- tb_vars$var_orig[i]
+
+  s_old <- 
+    dir_originals %>%
+    list.files(full.names = T) %>% 
+    str_subset(str_glue("{var_orig}")) %>% 
+    read_ncdf(make_time = F) %>% 
+    select(2) %>% 
+    slice(time, c(1,3,6))
+  
+  if(str_detect(names(s_old), "median")){
+    stat <- "perc50"
+  } else {
+    stat <- "mean"
+  }
+  
+  s_new <- 
+    "/mnt/bucket_mine/results/global_heat_pf/03_mosaicked/" %>% 
+    list.files(full.names = T) %>% 
+    str_subset(str_glue("{final_name}_")) %>% 
+    read_ncdf(var = stat) %>% 
+    st_set_dimensions("warming_levels", values = seq(0.5, 3, by = 0.5)) %>% 
+    slice(warming_levels, c(1,3,6)) %>% 
+    setNames("v")
+  
+  s_old <- 
+    s_old %>% 
+    st_warp(s_new) %>% 
+    setNames("v") %>%
+    mutate(v = set_units(v, NULL),
+           v = ifelse(v == -99999, NA, v))
+  
+  list(s_new, s_old)
+}
+
+
+
+func_land <- function(listmaps, mask){
+  
+  listmaps[[1]][is.na(mask)] <- NA
+  listmaps[[2]][is.na(mask)] <- NA
+  
+  return(listmaps)
+}
+
+
+
+
+func_plot <- function(foo, vartype){
+  
+  tb <- 
+    foo %>% 
+    as_tibble()
+
+  if(vartype == "precip"){
+    tb <-
+      tb %>% 
+      mutate(v = case_when(v > 200 ~ 200,
+                           v < -200 ~ -200,
+                           TRUE ~ v))
+  }
+  
+  
+  p <- 
+    tb %>% 
+    ggplot(aes(lon, lat, fill = v)) +
+    geom_raster() +
+    facet_wrap(~warming_levels, ncol = 1) +
+    coord_equal() +
+    theme(axis.title = element_blank(),
+          legend.position = "bottom")  
+  
+  
+  if(vartype == "precip"){
+    
+    p + 
+      colorspace::scale_fill_binned_diverging("blue-red3",
+                                          na.value = "transparent",
+                                          breaks = c(-200, -150, -100, -50, -10, 10, 50, 100, 150, 200),
+                                          rev = T,
+                                          name = NULL
+                                          # limits = c(-8,8)
+                                          ) +
+      guides(fill = guide_coloursteps(barwidth = 25, 
+                                      barheight = 0.5, 
+                                      ticks = F, 
+                                      show.limits = F,
+                                      even.steps = F))
+    
+  }
+      
+    
+}
+
+
+```
+
+
+## Change in total annual precip
+```{r}
+
+m <- func_maps(1)
+
+land_rast_0.2 <- 
+  st_warp(land_rast_0.1, m[[1]] %>% slice(warming_levels, 1))
+
+m <- func_land(m, land_rast_0.2)
+s_diff <- m[[1]] - m[[2]]
+func_plot(s_diff, "precip")
+
+
+```
+
+
+## Change in wettest 90 days
+```{r}
+
+m <- func_land(func_maps(2), land_rast_0.2)
+s_diff <- m[[1]] - m[[2]]
+func_plot(s_diff, "precip")
+
+```
+
+

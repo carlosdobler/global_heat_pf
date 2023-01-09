@@ -146,13 +146,15 @@ for(dom in doms){
     
     dir.create(dir_cat)
     
-    system(str_glue("cdo cat {ff} {dir_cat}/cat.nc"),
+    system(str_glue("cdo -settunits,d  -cat {ff} {dir_cat}/cat.nc"),
            ignore.stdout = T, ignore.stderr = T)
     
     
     # future_
-    walk(derived_vars, function(derived_vars_){
+    # walk(derived_vars, function(derived_vars_){
       
+    for(derived_vars_ in derived_vars){
+    
       print(str_glue("   {derived_vars_}"))
       
       old_file <- 
@@ -168,7 +170,8 @@ for(dom in doms){
         print(str_glue("      (replacing: {length(old_file)} file)"))
       }
       
-      fn_cdo(derived_vars_)
+      # fn_cdo(derived_vars_)
+      source("scripts/cdo_proc.R")
       
       time_steps <- 
         str_glue("{dir_derived}/{dom}_{derived_vars_}_yr_{rcm_}_{gcm_}.nc") %>% 
@@ -180,7 +183,8 @@ for(dom in doms){
       
       print(str_glue("      Done: new file with {time_steps} timesteps"))
       
-    })
+    }
+    # })
     
     unlink(dir_cat, recursive = T)
     

@@ -8,13 +8,16 @@ tb_dom <-
   )
 
 
-
-
 print(str_glue("Preparing to mosaick..."))
 
 
-
 # TEMPLATE DOMAIN MAPS
+
+final_vars <-
+  tb_vars %>% 
+  filter(var_input == {{var_input}}) %>% 
+  pull(final_name)
+
 
 l_s_valid <-
   
@@ -25,10 +28,10 @@ l_s_valid <-
       str_glue("{dir_bucket_mine}/results/global_heat_pf/02_ensembled") %>%
       list.files(full.names = T) %>%
       str_subset(dom) %>%
-      str_subset(derived_vars[1]) %>% # any var works
-      read_ncdf(var = "mean", # any statistic works 
-                ncsub = cbind(start = c(1,1,1), count = c(NA, NA, 1))) %>% # only 1 timestep
+      str_subset(final_vars[3]) %>%  # change for [1] # any var works
+      read_ncdf(ncsub = cbind(start = c(1,1,1), count = c(NA, NA, 1))) %>% # only 1 timestep
       suppressMessages() %>% 
+      select(1) %>% 
       adrop()
     
     # fix domains trespassing the 360 meridian  
@@ -63,8 +66,7 @@ l_s_valid <-
         st_as_stars(proxy = F)
       
       s <- 
-        s %>% 
-        setNames("mean") %>% 
+        s %>%
         st_set_dimensions(c(1,2), names = c("lon", "lat"))
       
       rm(s1, s2)
@@ -146,7 +148,9 @@ l_s_dist <-
 # SUMMED DISTANCES 
 # (only in overlapping areas)
 
-l_s_dist %>% 
+s_intersections <- 
+  
+  l_s_dist %>% 
   do.call(c, .) %>% 
   merge() %>% 
   st_apply(c(1,2), function(foo){
@@ -162,7 +166,7 @@ l_s_dist %>%
     
   }, 
   FUTURE = T,
-  .fname = "sum_intersect") -> s_intersections
+  .fname = "sum_intersect")
 
 
 
@@ -222,10 +226,72 @@ land <-
 # MOSAIC
 
 # loop through variables
-walk(derived_vars, function(derived_vars_){
+
+walk(final_vars, function(final_var){
   
   print(str_glue(" "))
   print(str_glue("Mosaicking {derived_vars_}"))
+  
+  l_s <- 
+    map(tb_dom$dom %>% set_names(), function(dom){
+      
+      # load ensembled map 
+      s <- 
+        str_glue("{dir_bucket_mine}/results/global_heat_pf/02_ensembled") %>%
+        list.files(full.names = T) %>%
+        str_subset(dom) %>%
+        str_subset(str_glue("{final_var}_ensemble")) %>%
+        read_ncdf %>%
+        suppressMessages()
+      
+      # # fix domains trespassing the 360 meridian 
+      if(dom == "EAS"){
+        
+        s <- 
+          s %>% 
+          filter(lon < 180)
+        
+      } else if(dom == "AUS"){
+        
+        s1 <- 
+          s %>% 
+          filter(lon < 180)
+        
+        s2 <- 
+          s %>% 
+          filter(lon > 180)
+        
+        s2 <- 
+          st_set_dimensions(s2, 
+                            which = "lon", 
+                            values = st_get_dimension_values(s2, 
+                                                             "lon", 
+                                                             center = F)-360) %>% 
+          st_set_crs(4326)
+        
+        s <- 
+          map(names(s), function(v){
+            
+            list(
+              s1 %>% select(v),
+              s2 %>% select(v)
+            ) %>% 
+              map(as, "SpatRaster") %>% 
+              do.call(terra::merge, .) %>%
+              st_as_stars(proxy = F) %>% 
+              setNames(v) %>% 
+              st_set_dimensions(c(1,2,3), names = c("lon", "lat", "warming_levels")) %>% 
+              st_set_dimensions(3, values = st_get_dimension_values(s, "warming_levels"))
+            
+          }) %>% 
+          do.call(c, .)
+        
+      }
+      
+      return(s)
+    })
+  
+  
   
   l_mos_wl <- 
     
@@ -236,82 +302,36 @@ walk(derived_vars, function(derived_vars_){
       
       l_s_weighted <- 
         
-        # loop through domains
-        map(tb_dom$dom, function(dom){
-          
-          # load ensembled map
+        map(tb_dom$dom %>% set_names(), function(dom){
+        
           s <- 
-            str_glue("{dir_bucket_mine}/results/global_heat_pf/02_ensembled") %>%
-            list.files(full.names = T) %>%
-            str_subset(dom) %>%
-            str_subset(derived_vars_) %>%
-            read_ncdf %>%
-            suppressMessages()
-          
-          # # fix domains trespassing the 360 meridian 
-          if(dom == "EAS"){
-            
-            s <- 
-              s %>% 
-              filter(lon < 180)
-            
-          } else if(dom == "AUS"){
-            
-            s1 <- 
-              s %>% 
-              filter(lon < 180)
-            
-            s2 <- 
-              s %>% 
-              filter(lon > 180)
-            
-            s2 <- 
-              st_set_dimensions(s2, 
-                                which = "lon", 
-                                values = st_get_dimension_values(s2, 
-                                                                 "lon", 
-                                                                 center = F)-360) %>% 
-              st_set_crs(4326)
-            
-            s <- 
-              map(names(s), function(v){
-                
-                list(
-                  s1 %>% select(v),
-                  s2 %>% select(v)
-                ) %>% 
-                  map(as, "SpatRaster") %>% 
-                  do.call(terra::merge, .) %>%
-                  st_as_stars(proxy = F) %>% 
-                  setNames(v) %>% 
-                  st_set_dimensions(c(1,2,3), names = c("lon", "lat", "warming_levels")) %>% 
-                  st_set_dimensions(3, values = st_get_dimension_values(s, "warming_levels"))
-                
-              }) %>% 
-              do.call(c, .)
-            
-          }
+            l_s %>% 
+            pluck(dom)
           
           r <- 
             s %>% 
             st_warp(l_s_weights[[1]]) %>% # any global map
             slice(warming_levels, wl_pos) # only 1 layer
           
-          c(r,
-            l_s_weights %>% pluck(dom)) %>% 
-            
-            # apply weights
-            mutate(mean = mean*weights,
-                   perc05 = perc05*weights,
-                   perc50 = perc50*weights,
-                   perc95 = perc95*weights) %>% 
-            select(-weights)
+          orig_names <- names(s)
           
-        }) %>% 
-        set_names(tb_dom$dom)
+          map(orig_names, function(v_){
+            
+            c(r %>% select(v_) %>% setNames("v"),
+              l_s_weights %>% pluck(dom)) %>% 
+              
+              # apply weights
+              mutate(v = v*weights) %>% 
+              select(-weights) %>% 
+              setNames(v_)
+            
+          }) %>% 
+            do.call(c, .)
+          
+        })
       
-      
-      l_s_weighted %>%
+      mos <- 
+        l_s_weighted %>%
         map(merge, name = "stats") %>%
         imap(~setNames(.x, .y)) %>%
         unname() %>% 
@@ -328,7 +348,7 @@ walk(derived_vars, function(derived_vars_){
           
         },
         FUTURE = F) %>% 
-        setNames(wl_) -> mos
+        setNames(wl_)
       
       return(mos)
       
@@ -348,26 +368,23 @@ walk(derived_vars, function(derived_vars_){
   
   s[is.na(land)] <- NA
   
-  
+  # save as nc
   print(str_glue("  Saving"))
   
-  # save as nc
-  
-  f_name <- 
-    tb_vars %>% 
-    filter(var_derived == derived_vars_) %>% 
-    pull(final_name)
-  
-  file_name <- str_glue("/mnt/bucket_mine/results/global_heat_pf/03_mosaicked/{f_name}_v01.nc")
-  
-  if(file.exists(file_name)){
-    file.remove(file_name)
-    print(str_glue("   (deleting previous file)"))
+  if(str_detect(final_var, "storm")){
+    
+    file_name <- str_glue("/mnt/bucket_mine/results/global_heat_pf/03_mosaicked/{final_var}-precip_v01.nc")
+    fn_save_nc(file_name, s %>% select(1) %>% setNames("precip"))
+    
+    file_name <- str_glue("/mnt/bucket_mine/results/global_heat_pf/03_mosaicked/{final_var}-freq_v01.nc")
+    fn_save_nc(file_name, s %>% select(2) %>% setNames("freq"))
+    
+  } else {
+    
+    file_name <- str_glue("/mnt/bucket_mine/results/global_heat_pf/03_mosaicked/{final_var}_v01.nc")
+    fn_save_nc(file_name, s)
+    
   }
-  
-  fn_write_nc_wtime_wvars(s, 
-                          file_name)
-  
   
   
 })
