@@ -180,7 +180,7 @@ func_plot <- function(foo, vartype){
       colorspace::scale_fill_binned_diverging("blue-red3",
                                           na.value = "transparent",
                                           # n.breaks = 15,
-                                          breaks = c(-10, -8, -5, -3, -2, 2, 3, 5, 8, 10),
+                                          breaks = c(-10, -8, -5, -3, -2,-1,1, 2, 3, 5, 8, 10),
                                           rev = T,
                                           name = NULL,
                                           limits = c(-10,10)) +

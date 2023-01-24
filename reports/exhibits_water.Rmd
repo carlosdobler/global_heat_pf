@@ -9,7 +9,7 @@ output: github_document
 knitr::opts_chunk$set(echo = F,
                       message = F,
                       warning = F,
-                      fig.height=32, 
+                      fig.height=18,#32, 
                       fig.width=9, 
                       out.width="100%")
 
@@ -71,9 +71,13 @@ fn_plot <- function(x1, y1, slices = c(2,4,6), ...){
     
     q <- quantile(tb$mean, c(0.02, 0.98), na.rm = T)
     
-    tb <- 
+    if(diff(q) > 0.001){
+      
+      tb <- 
       tb %>% 
       mutate(mean = raster::clamp(mean, q[1], q[2]))
+      
+    }
     
     
     tb %>% 
@@ -142,16 +146,16 @@ pmap(windows, fn_plot) %>%
 ## Change in snowy days
 ```{r}
 
-# s <- 
-#   dir_results %>% 
-#   list.files(full.names = T) %>%
-#   str_subset(str_glue("{derived_vars[5]}_")) %>%
-#   read_ncdf(var = "mean")
-# 
-# s[is.na(land_rast_0.2)] <- NA
-# 
-# pmap(windows, fn_plot) %>%
-#   wrap_plots(ncol = 1)
+s <-
+  dir_results %>%
+  list.files(full.names = T) %>%
+  str_subset(str_glue("{derived_vars[5]}_")) %>%
+  read_ncdf(var = "mean")
+
+s[is.na(land_rast_0.2)] <- NA
+
+pmap(windows, fn_plot) %>%
+  wrap_plots(ncol = 1)
 
 
 ```

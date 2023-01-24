@@ -13,6 +13,8 @@ Carlos Dobler -
 
 ## Change in snowy days
 
+<img src="exhibits_water_files/figure-gfm/unnamed-chunk-3-1.png" width="100%" />
+
 ## Change in dry hot days
 
 <img src="exhibits_water_files/figure-gfm/unnamed-chunk-4-1.png" width="100%" />
