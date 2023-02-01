@@ -1,8 +1,22 @@
 
+# Function to assemble a table of all CORDEX files needed to calculate
+# a derived variable. Columns of table include the name of the file, 
+# climate variable, GCM, RCM, period of time, and location of the file.
+# File naming differs among wetbulb, SPEI, and the rest of variables, so
+# extraction of info for each is different.
+
+
 fn_data_table <- function(vari){
   
-  dir_remo <- str_glue("{dir_bucket_cmip5}/RCM_regridded_data/REMO2015/{dom}/daily/{vari}")
-  dir_regcm <- str_glue("{dir_bucket_cmip5}/RCM_regridded_data/CORDEX_22/{dom}/daily/{vari}")
+  if(str_detect(vari, "spei")){
+    t_res <- "monthly"
+  } else {
+    t_res <- "daily"
+  }
+  
+  
+  dir_remo <- str_glue("{dir_cordex}/REMO2015/{dom}/{t_res}/{vari}")
+  dir_regcm <- str_glue("{dir_cordex}/CORDEX_22/{dom}/{t_res}/{vari}")
   
   
   tb_files <- 
@@ -56,6 +70,48 @@ fn_data_table <- function(vari){
         
         
         
+      } else if(str_detect(vari, "spei")){
+        
+        dd %>% 
+          list.files() %>%
+          str_subset(".nc$") %>%
+          str_subset(".*_[:digit:]*-[:digit:]*.nc") %>%
+          
+          map_dfr(function(d){
+            
+            tibble(file = d) %>%
+              
+              mutate(
+                
+                var = file %>%
+                  str_split("_", simplify = T) %>%
+                  .[ , 1],
+                
+                gcm = file %>%
+                  str_split("_", simplify = T) %>%
+                  .[ , 4],
+                
+                rcm = rcm_,
+                
+                t_i = file %>%
+                  str_split("_", simplify = T) %>%
+                  .[ , 6] %>%
+                  str_sub(end = 6) %>% 
+                  str_c("01"),
+                
+                t_f = file %>%
+                  str_split("_", simplify = T) %>%
+                  .[ , 6] %>%
+                  str_sub(start = 10, end = 15) %>% 
+                  str_c("01"),
+                
+                loc = dd
+                
+              )
+          }) 
+        
+        
+        
       } else {
         
         dd %>% 
@@ -77,11 +133,7 @@ fn_data_table <- function(vari){
                   str_split("_", simplify = T) %>%
                   .[ , 3],
                 
-                rcm = file %>%
-                  str_split("_", simplify = T) %>%
-                  .[ , 6] %>% 
-                  str_split("-", simplify = T) %>% 
-                  .[ , 2],
+                rcm = rcm_,
                 
                 t_i = file %>%
                   str_split("_", simplify = T) %>%
@@ -112,7 +164,9 @@ fn_data_table <- function(vari){
     )
   
   
-  # missing precip files for AFR
+  # some precip files for AFR (REMO Had model) 
+  # have a different naming structure:
+  
   if(dom == "AFR" & vari == "precipitation"){
     
     tb_files <- 
@@ -138,11 +192,7 @@ fn_data_table <- function(vari){
               str_split("_", simplify = T) %>%
               .[ , 3],
             
-            rcm = file %>%
-              str_split("_", simplify = T) %>%
-              .[ , 6] %>% 
-              str_split("-", simplify = T) %>% 
-              .[ , 2],
+            rcm = rcm_,
             
             t_i = file %>%
               str_split("_", simplify = T) %>%

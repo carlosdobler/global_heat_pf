@@ -1,4 +1,72 @@
 
+var_input <- 
+  
+  c(# heat module
+    "maximum_temperature",
+    "minimum_temperature",
+    "maximum_wetbulb_temperature",
+    "average_temperature",
+    
+    # water module
+    "precipitation",
+    "precipitation+average_temperature",
+    "precipitation+maximum_temperature",
+    
+    # land module
+    "spei",
+    "fwi")[8] # choose input variable to process
+
+
+
+
+# SETUP -----------------------------------------------------------------------
+
+library(tidyverse)
+library(lubridate)
+library(stars)
+library(furrr)
+library(units)
+
+options(future.fork.enable = T)
+
+source("scripts/functions.R")
+
+dir_derived <- "/mnt/bucket_mine/results/global_heat_pf/01_derived"
+dir_ensembled <- "/mnt/bucket_mine/results/global_heat_pf/02_ensembled"
+
+doms <- c("SEA", "AUS", "CAS", "WAS", "EAS", "AFR", "EUR", "NAM", "CAM", "SAM")
+
+wl <- c("0.5", "1.0", "1.5", "2.0", "2.5", "3.0")
+
+# load thresholds table
+thresholds <- 
+  str_glue("/mnt/bucket_mine/misc_data/CMIP5_model_temp_thresholds.csv") %>% 
+  read_delim() %>%
+  suppressMessages() %>% 
+  select(1:6) %>% 
+  pivot_longer(-Model, names_to = "wl") %>% 
+  mutate(wl = str_sub(wl, 3)) %>% 
+  
+  mutate(wl = ifelse(str_length(wl) == 1, str_glue("{wl}.0"), wl))  %>%
+  
+  mutate(Model = case_when(str_detect(Model, "HadGEM") ~ str_glue("MOHC-{Model}"),
+                           str_detect(Model, "MPI") ~ str_glue("MPI-M-{Model}"),
+                           str_detect(Model, "NorESM") ~ str_glue("NCC-{Model}"),
+                           str_detect(Model, "GFDL") ~ str_glue("NOAA-GFDL-{Model}"),
+                           str_detect(Model, "MIROC") ~ str_glue("MIROC-{Model}"),
+                           TRUE ~ Model))
+
+# load table of variables
+tb_vars <-
+  read_csv("/mnt/bucket_mine/pf_variable_table.csv") %>% 
+  suppressMessages()
+
+# derived vars to process
+derived_vars <- 
+  tb_vars %>% 
+  filter(var_input == {{var_input}}) %>% 
+  pull(var_derived)
+
 
 # DOMAIN LOOP --------------------------------------------------------------------------------------
 
@@ -10,10 +78,10 @@ for(dom in doms){
   
   
   # LOOP THROUGH VARS
-  for(derived_vars_ in derived_vars){
+  for(derived_var in derived_vars){
     
     print(str_glue(" "))
-    print(str_glue("Processing {derived_vars_}"))
+    print(str_glue("Processing {derived_var}"))
     
     
     # IMPORT
@@ -21,14 +89,14 @@ for(dom in doms){
     #modifications to imported files
     change_import <- 
       tb_vars %>% 
-      filter(var_derived == derived_vars_) %>% 
+      filter(var_derived == derived_var) %>% 
       pull(change_import)
     
     ff <- 
       dir_derived %>% 
       list.files() %>% 
       str_subset(dom) %>% 
-      str_subset(derived_vars_)
+      str_subset(derived_var)
     
     
     
@@ -110,7 +178,7 @@ for(dom in doms){
         #   st_set_dimensions("time",
         #                     values = seq(1970, length.out = dim(s)[3])
         #   ) %>%
-        drop_units()
+        mutate(v = set_units(v, NULL))
       })
     
     
@@ -186,171 +254,24 @@ for(dom in doms){
       })
     
     
-    
-    # CALCULATE STATS BY WL
-    
-    if(derived_vars_ == "p98-precip"){
       
-      print(str_glue("Calculating stats WL 0.5"))
-      
-      s_baseline <- 
-        l_s_wl %>% 
-        pluck(1) %>% # 0.5 WL
+    l_s_wl_stats <-
+      imap(wl, function(wl_, iwl){
         
-        st_apply(c(1,2), function(x){
-          
-          if(any(is.na(x))){
-            c(NA,
-              NA)
-          } else {
-            
-            lmoms <- lmom::samlmu(x)
-            params <- lmom::pelgev(lmoms)
-            
-            lev <- lmom::quagev(0.99,
-                                para = params)
-            
-            c(lev,
-              0.01) # 1-0.99
-          }
-          
-        },
-        FUTURE = T,
-        .fname = "stats") %>% 
-        aperm(c(2,3,1))
-      
-      l_s_wl_stats <- 
-        map(2:6, function(iwl){
-          
-          print(str_glue("Calculating stats WL {wl[iwl]}"))
-          
-          s <- 
-            l_s_wl %>% 
-            pluck(iwl) %>%
-            {c(s_baseline, ., along = 3)} %>% 
-            
-            st_apply(c(1,2), function(x){
-              
-              if(any(is.na(x))){
-                c(NA,
-                  NA)
-              } else {
-                
-                baseline_lev <- x[1]
-                
-                x <- x[-(1:2)]
-                
-                lmoms <- lmom::samlmu(x)
-                params <- lmom::pelgev(lmoms)
-                
-                lev <- lmom::quagev(0.99,
-                                    para = params)
-                
-                prob <- 1 - lmom::cdfgev(baseline_lev,
-                                         para = params)
-                
-                c(lev,
-                  prob)
-                
-              }
-            },
-            FUTURE = T,
-            .fname = "stats") %>% 
-            aperm(c(2,3,1))
-          
-        })
-      
-      l_s_wl_stats <- 
-        append(list(s_baseline), l_s_wl_stats) %>% 
-        map(split, "stats") %>% 
-        map(setNames, c("level", "prob"))
-      
-      
-    } else {
-      
-      l_s_wl_stats <- 
-        imap(wl, function(wl_, iwl){
-          
-          print(str_glue("Calculating stats WL {wl_}"))
-          
-          l_s_wl %>%
-            pluck(iwl) %>%
-            
-            st_apply(c(1,2),
-                     fn_statistics,
-                     FUTURE = F,
-                     .fname = "stats") %>%
-            aperm(c(2,3,1)) %>%
-            split("stats")
-          
-        })
-      
-    }
-    
-    
-    final_var <- tb_vars[tb_vars$var_derived == derived_vars_,]$final_name
-    
-    
-    if(str_detect(final_var, "storm")){
-      
-      print(str_glue("Calculating differences"))
-      
-      # level
-      
-      l_s_wl_level <- 
-        l_s_wl_stats %>% 
-        map(select, level)
-      
-      l_s_wl_level <- 
-        l_s_wl_level[2:6] %>% 
-        map(function(s){
-          s - l_s_wl_level[[1]] # subtract
-        }) %>% 
-        {append(list(l_s_wl_level[[1]]), .)}
-      
-      # prob
-      
-      l_s_wl_prob <- 
-        l_s_wl_stats %>% 
-        map(select, prob)
-      
-      l_s_wl_prob <- 
-        l_s_wl_prob[2:6] %>% 
-        map(function(s){
-          s / l_s_wl_prob[[1]] # divide
-        }) %>% 
-        {append(list(l_s_wl_prob[[1]]), .)}
+        print(str_glue("Calculating stats WL {wl_}"))
         
-      # combine  
-      
-      l_s_wl_stats <- 
-        list(l_s_wl_level,
-             l_s_wl_prob) %>% 
-        transpose() %>% 
-        map(~do.call(c, .x))
-      
-      
-    # non "storm" vars
-    } else {
-      
-      if(str_detect(final_var, "change")){
+        l_s_wl %>%
+          pluck(iwl) %>%
+          
+          st_apply(c(1,2),
+                   fn_statistics,
+                   FUTURE = F,
+                   .fname = "stats") %>%
+          aperm(c(2,3,1)) %>%
+          split("stats")
         
-        print(str_glue("Calculating differences"))
+      })
       
-        l_s_wl_stats <- 
-          l_s_wl_stats[2:6] %>% 
-          map(function(s){
-            
-            s - l_s_wl_stats[[1]]
-            
-          }) %>% 
-          {append(list(l_s_wl_stats[[1]]), .)}
-        
-      }
-      
-    }
-    
-    
     
     # WL as dimension
     s_result <-
@@ -366,7 +287,7 @@ for(dom in doms){
     
     res_filename <- 
       str_glue(
-        "{dir_bucket_mine}/results/global_heat_pf/02_ensembled/{dom}_{final_var}_ensemble.nc"
+        "{dir_ensembled}/{dom}_{derived_var}_ensemble.nc"
       )
     
     fn_save_nc(res_filename, s_result)
@@ -384,7 +305,7 @@ for(dom in doms){
 #     dir_derived %>% 
 #     list.files() %>% 
 #     str_subset(dom) %>% #str_subset("wetbulb") %>% .[1] -> f
-#     str_subset(derived_vars_)
+#     str_subset(derived_var)
 #   
 #   
 #   map_dfr(ff, function(f){
