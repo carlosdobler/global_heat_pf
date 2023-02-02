@@ -28,6 +28,7 @@ library(furrr)
 library(units)
 
 options(future.fork.enable = T)
+plan(multicore)
 
 source("scripts/functions.R")
 
