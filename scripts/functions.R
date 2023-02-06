@@ -220,33 +220,73 @@ fn_data_table <- function(vari){
 }
 
 
+
+# *****************
+
+# Wrapper of the function to calculate derived variables (fn_derived), with 
+# added functionality to overwrite results and verify correct time dimension.
+# This function was written so that variables could be selectively processed
+# in parallel.
+
+
+# fn_fn_derived <- function(derived_var){
+#   
+#   outfile <-
+#     str_glue("{dir_derived}/{dom}_{derived_var}_yr_{rcm_}_{gcm_}.nc")
+#   
+#   if(file.exists(outfile)){
+#     file.remove(outfile)
+#     print(str_glue("      (old derived file removed)"))
+#   }
+#   
+#   # call function to calculate drived var
+#   fn_derived(derived_var, outfile)
+#   
+#   # verify correct time dimension
+#   time_steps <-
+#     str_glue("{dir_derived}/{dom}_{derived_var}_yr_{rcm_}_{gcm_}.nc") %>%
+#     read_ncdf(proxy = T, make_time = F) %>%
+#     suppressMessages() %>%
+#     suppressWarnings() %>%
+#     st_get_dimension_values("time") %>%
+#     length()
+#   
+#   print(str_glue("      Done: new file with {time_steps} timesteps ({derived_var})"))
+#   
+# }
+
+
+
+
+
+
+
+# fn_models_table <- function(tb_files){
+#   
+#   tb_models <- 
+#     unique(tb_files[, c("gcm", "rcm")]) %>% 
+#     mutate(calendar = case_when(str_detect(gcm, "Had") ~ 360,
+#                                 str_detect(rcm, "REMO") & str_detect(gcm, "Had", negate = T) ~ 365.25,
+#                                 str_detect(rcm, "RegCM") & str_detect(gcm, "MPI") ~ 365.25,
+#                                 str_detect(rcm, "RegCM") & str_detect(gcm, "Nor") ~ 365,
+#                                 str_detect(rcm, "RegCM") & str_detect(gcm, "GFDL") ~ 365))
+#   
+#   
+#   if(dom %in% c("SAM", "AUS", "CAS")){
+#     
+#     tb_models <- 
+#       tb_models %>% 
+#       filter(str_detect(rcm, "RegCM", negate = T))
+#     
+#   }
+#   
+#   return(tb_models)
+# }
+
+
 # ************
 
 
-fn_models_table <- function(tb_files){
-  
-  tb_models <- 
-    unique(tb_files[, c("gcm", "rcm")]) %>% 
-    mutate(calendar = case_when(str_detect(gcm, "Had") ~ 360,
-                                str_detect(rcm, "REMO") & str_detect(gcm, "Had", negate = T) ~ 365.25,
-                                str_detect(rcm, "RegCM") & str_detect(gcm, "MPI") ~ 365.25,
-                                str_detect(rcm, "RegCM") & str_detect(gcm, "Nor") ~ 365,
-                                str_detect(rcm, "RegCM") & str_detect(gcm, "GFDL") ~ 365))
-  
-  
-  if(dom %in% c("SAM", "AUS", "CAS")){
-    
-    tb_models <- 
-      tb_models %>% 
-      filter(str_detect(rcm, "RegCM", negate = T))
-    
-  }
-  
-  return(tb_models)
-}
-
-
-# ************
 
 
 
@@ -255,62 +295,60 @@ fn_models_table <- function(tb_files){
 
 
 
-
-
-fn_dates <- function(d, cal_type){
-  
-  if(cal_type == 360){
-    
-    fixed_time <- 
-      
-      tibble(time = str_sub(d, end = 10),
-           yr = str_sub(time, end = 4),
-           mon = str_sub(time, start = 6, end = 7)) %>% 
-      
-      group_by(yr, mon) %>% 
-      nest() %>% 
-      mutate(dy = map(data, function(df){
-        
-        seq(1,
-            days_in_month(df$time[1]),
-            length.out = 30) %>% 
-          round()
-        
-      })) %>% 
-      unnest(c(dy, data)) %>% 
-      mutate(time = str_glue("{yr}-{mon}-{dy}") %>% as_date()) %>% 
-      pull(time)
-    
-  } else if(cal_type == 365){
-    
-    fixed_time <- 
-      
-      tibble(time = str_sub(d, end = 10),
-             yr = str_sub(time, end = 4)) %>% 
-      
-      group_by(yr) %>% 
-      nest() %>% 
-      mutate(time = map(data, function(df){
-        
-        seq(df$time %>% first() %>% as_date(),
-            df$time %>% last() %>% as_date(),
-            length.out = 365)
-        
-      })) %>% 
-      unnest(time) %>% 
-      pull(time)
-      
-    
-  } else if(cal_type == 365.25){
-    
-    fixed_time <- 
-      seq(as_date(first(d)), as_date(last(d)), by = "1 day")
-    
-  }
-  
-  return(fixed_time)
-  
-}
+# fn_dates <- function(d, cal_type){
+#   
+#   if(cal_type == 360){
+#     
+#     fixed_time <- 
+#       
+#       tibble(time = str_sub(d, end = 10),
+#            yr = str_sub(time, end = 4),
+#            mon = str_sub(time, start = 6, end = 7)) %>% 
+#       
+#       group_by(yr, mon) %>% 
+#       nest() %>% 
+#       mutate(dy = map(data, function(df){
+#         
+#         seq(1,
+#             days_in_month(df$time[1]),
+#             length.out = 30) %>% 
+#           round()
+#         
+#       })) %>% 
+#       unnest(c(dy, data)) %>% 
+#       mutate(time = str_glue("{yr}-{mon}-{dy}") %>% as_date()) %>% 
+#       pull(time)
+#     
+#   } else if(cal_type == 365){
+#     
+#     fixed_time <- 
+#       
+#       tibble(time = str_sub(d, end = 10),
+#              yr = str_sub(time, end = 4)) %>% 
+#       
+#       group_by(yr) %>% 
+#       nest() %>% 
+#       mutate(time = map(data, function(df){
+#         
+#         seq(df$time %>% first() %>% as_date(),
+#             df$time %>% last() %>% as_date(),
+#             length.out = 365)
+#         
+#       })) %>% 
+#       unnest(time) %>% 
+#       pull(time)
+#       
+#     
+#   } else if(cal_type == 365.25){
+#     
+#     fixed_time <- 
+#       seq(as_date(first(d)), as_date(last(d)), by = "1 day")
+#     
+#   }
+#   
+#   return(fixed_time)
+#   
+# }
 
 
 
@@ -318,22 +356,22 @@ fn_dates <- function(d, cal_type){
 
 
 
-fn_statistics <- function(ts){
-  
-  if(any(is.na(ts))){
-    
-    c(mean = NA,
-      perc05 = NA, 
-      perc50 = NA,
-      perc95 = NA)
-    
-  } else {
-    
-    c(mean = mean(ts),
-      quantile(ts, c(0.05, 0.5, 0.95)) %>% setNames(c("perc05", "perc50", "perc95")))
-    
-  }
-}
+# fn_statistics <- function(ts){
+#   
+#   if(any(is.na(ts))){
+#     
+#     c(mean = NA,
+#       perc05 = NA, 
+#       perc50 = NA,
+#       perc95 = NA)
+#     
+#   } else {
+#     
+#     c(mean = mean(ts),
+#       quantile(ts, c(0.05, 0.5, 0.95)) %>% setNames(c("perc05", "perc50", "perc95")))
+#     
+#   }
+# }
 
 
 
@@ -342,7 +380,13 @@ fn_statistics <- function(ts){
 
 
 
-fn_write_nc_wtime_wvars <- function(star_to_export, file_name){
+fn_write_nc <- function(star_to_export, filename){
+  
+  if(file.exists(filename)){
+    file.remove(filename)
+    print(str_glue("\t (previous ensemble deleted)"))
+  }
+  
   
   # define dimensions
   dim_lon <- ncdf4::ncdim_def(name = "lon", 
@@ -357,7 +401,7 @@ fn_write_nc_wtime_wvars <- function(star_to_export, file_name){
                                 st_get_dimension_values(2) %>% 
                                 round(1))
   
-  dim_time <- ncdf4::ncdim_def(name = "warming_levels", 
+  dim_time <- ncdf4::ncdim_def(name = "wl", 
                                units = "", 
                                vals = star_to_export %>% 
                                  st_get_dimension_values(3) %>% 
@@ -367,14 +411,14 @@ fn_write_nc_wtime_wvars <- function(star_to_export, file_name){
   # define variables
   varis <- 
     names(star_to_export) %>% 
-    map(~ncdf4::ncvar_def(name = .x,
+    map(~ncdf4::ncvar_def(name = all_of(.x),
                           units = "",
                           dim = list(dim_lon, dim_lat, dim_time), 
                           missval = -999999))
   
   
   # create file
-  ncnew <- ncdf4::nc_create(filename = file_name, 
+  ncnew <- ncdf4::nc_create(filename = filename, 
                             vars = varis,
                             force_v4 = TRUE)
   
@@ -434,21 +478,21 @@ fn_write_nc_derived <- function(array, file_name, dim_lon, dim_lat, dim_time, va
 
 # ***********
 
-fn_save_nc <- function(res_filename, s_result){
-  
-  if(file.exists(res_filename)){
-    file.remove(res_filename)
-    print(str_glue("\t (previous file deleted)"))
-  }
-  
-  fn_write_nc_wtime_wvars(
-    s_result,
-    res_filename
-  )
-  
-  
-  
-}
+# fn_save_nc <- function(res_filename, s_result){
+#   
+#   if(file.exists(res_filename)){
+#     file.remove(res_filename)
+#     print(str_glue("\t (previous file deleted)"))
+#   }
+#   
+#   fn_write_nc_wtime_wvars(
+#     s_result,
+#     res_filename
+#   )
+#   
+#   
+#   
+# }
 
 
 

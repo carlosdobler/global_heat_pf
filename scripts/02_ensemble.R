@@ -1,21 +1,36 @@
 
-var_input <- 
+derived_vars <- 
   
-  c(# heat module
-    "maximum_temperature",
-    "minimum_temperature",
-    "maximum_wetbulb_temperature",
-    "average_temperature",
+  c("days-gte-32C-tasmax",
+    "days-gte-35C-tasmax",
+    "days-gte-38C-tasmax",
+    "ten-hottest-days-tasmax",
+    "mean-tasmax",
+    "days-lt-0C-tasmax",
     
-    # water module
-    "precipitation",
-    "precipitation+average_temperature",
-    "precipitation+maximum_temperature",
+    "days-gte-20C-tasmin",
+    "days-gte-25C-tasmin",
+    "mean-tasmin",
+    "days-lt-0C-tasmin",
     
-    # land module
-    "spei",
-    "fwi")[8] # choose input variable to process
-
+    "days-gte-26C-wetbulb",
+    "days-gte-28C-wetbulb",
+    "days-gte-30C-wetbulb",
+    "days-gte-32C-wetbulb",
+    "ten-hottest-days-wetbulb",
+    
+    "mean-tasmean",
+    
+    "total-precip",
+    "ninety-wettest-days",
+    "100yr-storm-precip",
+    "100yr-storm-freq",
+    "days-gte-1mm-precip-lt-0C-tasmean",
+    "days-lt-b10thperc-precip-gte-b90thperc-tasmax",
+    
+    "mean-spei",
+    "prop-months-lte-neg0.8-spei",
+    "prop-months-lte-neg1.6-spei")[1:15] # choose derived variable(s) to assemble
 
 
 
@@ -28,6 +43,7 @@ library(furrr)
 library(units)
 
 options(future.fork.enable = T)
+plan(multicore)
 
 source("scripts/functions.R")
 
@@ -36,7 +52,7 @@ dir_ensembled <- "/mnt/bucket_mine/results/global_heat_pf/02_ensembled"
 
 doms <- c("SEA", "AUS", "CAS", "WAS", "EAS", "AFR", "EUR", "NAM", "CAM", "SAM")
 
-wl <- c("0.5", "1.0", "1.5", "2.0", "2.5", "3.0")
+wls <- c("0.5", "1.0", "1.5", "2.0", "2.5", "3.0")
 
 # load thresholds table
 thresholds <- 
@@ -45,10 +61,11 @@ thresholds <-
   suppressMessages() %>% 
   select(1:6) %>% 
   pivot_longer(-Model, names_to = "wl") %>% 
-  mutate(wl = str_sub(wl, 3)) %>% 
   
+  mutate(wl = str_sub(wl, 3)) %>% 
   mutate(wl = ifelse(str_length(wl) == 1, str_glue("{wl}.0"), wl))  %>%
   
+  # add institutes
   mutate(Model = case_when(str_detect(Model, "HadGEM") ~ str_glue("MOHC-{Model}"),
                            str_detect(Model, "MPI") ~ str_glue("MPI-M-{Model}"),
                            str_detect(Model, "NorESM") ~ str_glue("NCC-{Model}"),
@@ -61,37 +78,37 @@ tb_vars <-
   read_csv("/mnt/bucket_mine/pf_variable_table.csv") %>% 
   suppressMessages()
 
-# derived vars to process
-derived_vars <- 
-  tb_vars %>% 
-  filter(var_input == {{var_input}}) %>% 
-  pull(var_derived)
 
 
-# DOMAIN LOOP --------------------------------------------------------------------------------------
 
+# DOMAIN LOOP -----------------------------------------------------------------
 
 for(dom in doms){
-
+  
   print(str_glue(" "))
   print(str_glue("PROCESSING {dom}"))
   
   
-  # LOOP THROUGH VARS
+  
+  # VARIABLE LOOP -------------------------------------------------------------
+  
   for(derived_var in derived_vars){
     
     print(str_glue(" "))
     print(str_glue("Processing {derived_var}"))
     
     
-    # IMPORT
     
-    #modifications to imported files
+    ## IMPORT DERIVED VAR FILES -----------------------------------------------
+    
+    # modifications to imported files
+    # e.g. convert units (K ->  C)
     change_import <- 
       tb_vars %>% 
       filter(var_derived == derived_var) %>% 
       pull(change_import)
     
+    # vector of files to import
     ff <- 
       dir_derived %>% 
       list.files() %>% 
@@ -99,13 +116,13 @@ for(dom in doms){
       str_subset(derived_var)
     
     
-    
+    # import files into a list
     l_s <- 
       
       future_map(ff, function(f){
         
-      
-        if(change_import == "fix_date_convert_C"){
+        # apply changes 
+        if(change_import == "fix-time+convert-C"){
           read_ncdf(str_glue("{dir_derived}/{f}"), 
                     proxy = F, make_time = F) %>% 
             suppressMessages() %>% 
@@ -113,7 +130,7 @@ for(dom in doms){
             setNames("v") %>% 
             mutate(v = set_units(v, degC))
           
-        } else if(change_import == "fix_date_convert_mm"){
+        } else if(change_import == "fix-time+convert-mm"){
           read_ncdf(str_glue("{dir_derived}/{f}"), 
                     proxy = F, make_time = F) %>% 
             suppressMessages() %>% 
@@ -121,7 +138,7 @@ for(dom in doms){
             setNames("v") %>% 
             mutate(v = set_units(v, kg/m^2/d))
           
-        } else if(change_import == "convert_C"){
+        } else if(change_import == "convert-C"){
           read_ncdf(str_glue("{dir_derived}/{f}"), 
                     proxy = F) %>% 
             suppressMessages() %>% 
@@ -129,7 +146,7 @@ for(dom in doms){
             setNames("v") %>% 
             mutate(v = set_units(v, degC))
           
-        } else if(change_import == "convert_mm"){
+        } else if(change_import == "convert-mm"){
           read_ncdf(str_glue("{dir_derived}/{f}"), 
                     proxy = F) %>% 
             suppressMessages() %>% 
@@ -137,7 +154,7 @@ for(dom in doms){
             setNames("v") %>% 
             mutate(v = set_units(v, kg/m^2/d))
           
-        } else if(change_import == "fix_date"){
+        } else if(change_import == "fix-time"){
           read_ncdf(str_glue("{dir_derived}/{f}"), 
                     proxy = F, make_time = F) %>% 
             suppressMessages() %>% 
@@ -157,25 +174,26 @@ for(dom in doms){
       },
       .options = furrr_options(seed = NULL)) %>% 
       
-      # fix date dim
+      # fix time dim
       map(function(s){
-        
-        # s %>% 
-        #   st_set_dimensions("time",
-        #                     values = st_get_dimension_values(s, "time") %>% 
-        #                       as.character() %>% 
-        #                       str_sub(end = 4)) %>% 
-        #   drop_units()
         
         s %>%
           st_set_dimensions("time",
                             values = st_get_dimension_values(s, "time") %>%
-                              # ymd() %>%
-                              year()
-                            ) %>%
-
-        # s %>%
-        #   st_set_dimensions("time",
+                              as.character() %>%
+                              str_sub(end = 4) %>% 
+                              as.integer()) %>%
+          #   drop_units()
+          
+          # s %>%
+          #   st_set_dimensions("time",
+          #                     values = st_get_dimension_values(s, "time") %>%
+          #                       # ymd() %>%
+          #                       year()
+          #                     ) %>%
+          
+          # s %>%
+          #   st_set_dimensions("time",
         #                     values = seq(1970, length.out = dim(s)[3])
         #   ) %>%
         mutate(v = set_units(v, NULL))
@@ -187,101 +205,135 @@ for(dom in doms){
     
     walk2(l_s, ff, function(s, f){
       
-      range_time <- 
+      yrs <-
         s %>% 
-        st_get_dimension_values("time") %>% 
+        st_get_dimension_values("time")
+      
+      range_time <- 
+        yrs %>% 
         range()
       
-      f <- 
+      time_steps <- 
+        yrs %>% 
+        length()
+      
+      mod <- 
         f %>% 
         str_extract("(?<=yr_)[:alnum:]*_[:graph:]*(?=\\.nc)")
       
-      print(str_glue("   Date range {f}:     \t{range_time[1]} - {range_time[2]}"))
+      print(str_glue("   {mod}: \t{range_time[1]} - {range_time[2]} ({time_steps} timesteps)"))
       
     })
     
     
     
     
-    # SLICE BY WL
+    ## SLICE BY WARMING LEVELS ------------------------------------------------
     
     l_s_wl <- 
       
-      map(wl, function(wl_){
+      # loop through warming levels
+      map(wls, function(wl){
         
-        # wl_ <- "3.0"
+        print(str_glue("Slicing WL {wl}"))
         
-        print(str_glue("Slicing WL {wl_}"))
-        
-        # l_s_wl <-
+        # loop through models
+        map2(ff, l_s, function(f, s){
           
-          map2(ff, l_s, function(f, s){
+          # rcm_ <- f %>% str_split("_", simplify = T) %>% .[,4]
+          
+          # extract GCM to identify threshold year
+          gcm_ <- 
+            f %>% 
+            str_split("_", simplify = T) %>% 
+            .[,5] %>% 
+            str_remove(".nc")
+          
+          # baseline:
+          if(wl == "0.5"){
             
-            # print(f)
+            s %>% 
+              filter(time >= 1971,
+                     time <= 2000)
             
-            rcm_ <- f %>% str_split("_", simplify = T) %>% .[,4]
-            gcm_ <- f %>% str_split("_", simplify = T) %>% .[,5] %>% str_remove(".nc")
+          # other warming levels:
+          } else {
             
-            if(wl_ == "0.5"){
-              
+            thres_val <-
+              thresholds %>%
+              filter(str_detect(Model, str_glue("{gcm_}$"))) %>% 
+              filter(wl == {{wl}})
+            
+            s <- 
               s %>% 
-                filter(time >= 1971,
-                       time <= 2000)
-              
-              # print(str_glue("   1971-2000"))
-              
-            } else {
-              
-              thres_val <-
-                thresholds %>%
-                filter(str_detect(Model, str_glue("{gcm_}$"))) %>% 
-                filter(wl == wl_)# %>%
-                # pull(value)
-              
-              s <- 
-                s %>% 
-                filter(time >= thres_val$value - 10,
-                       time <= thres_val$value + 10)
-              
-              print(str_glue("   {gcm_}: {thres_val$Model}: {thres_val$value}"))
-              
-              return(s)
-            }
+              filter(time >= thres_val$value - 10,
+                     time <= thres_val$value + 10)
             
-          }) %>% 
-            {do.call(c, c(., along = "time"))}
+            # verify correct slicing:
+            print(str_glue("   {gcm_}: {thres_val$Model}: {thres_val$value}"))
+            
+            return(s)
+          }
+          
+        }) %>% 
+          
+          # concatenate all models and form a single time dimension
+          {do.call(c, c(., along = "time"))}
         
       })
     
     
-      
+    ## CALCULATE STATISTICS ---------------------------------------------------
+    
+    # Statistics are calculated per grid cell (across time dimension). They
+    # include the mean, the median, and the 5th and 95th percentile.
+    
     l_s_wl_stats <-
-      imap(wl, function(wl_, iwl){
+      
+      # loop through warming levels
+      imap(wls, function(wl, iwl){
         
-        print(str_glue("Calculating stats WL {wl_}"))
+        print(str_glue("Calculating stats WL {wl}"))
         
         l_s_wl %>%
           pluck(iwl) %>%
           
-          st_apply(c(1,2),
-                   fn_statistics,
-                   FUTURE = F,
-                   .fname = "stats") %>%
+          st_apply(c(1,2), function(ts){
+            
+            # if a given grid cell is empty, propagate NAs
+            if(any(is.na(ts))){
+              
+              c(mean = NA,
+                perc05 = NA, 
+                perc50 = NA,
+                perc95 = NA)
+              
+            } else {
+              
+              c(mean = mean(ts),
+                quantile(ts, c(0.05, 0.5, 0.95)) %>% 
+                  setNames(c("perc05", "perc50", "perc95")))
+              
+            }
+            
+          },
+          FUTURE = T,
+          .fname = "stats") %>%
           aperm(c(2,3,1)) %>%
           split("stats")
         
       })
-      
     
-    # WL as dimension
+    
+    # concatenate warming levels
     s_result <-
       l_s_wl_stats %>%
       {do.call(c, c(., along = "wl"))} %>%
-      st_set_dimensions(3, values = wl)
+      st_set_dimensions(3, values = wls)
     
     
     
-    # SAVE
+    ## SAVE RESULT ------------------------------------------------------------
     
     print(str_glue("Saving result"))
     
@@ -290,39 +342,10 @@ for(dom in doms){
         "{dir_ensembled}/{dom}_{derived_var}_ensemble.nc"
       )
     
-    fn_save_nc(res_filename, s_result)
+    fn_write_nc(s_result, res_filename)
     
     
   }
   
 }
-
-
-
-# map_dfr(doms, function(dom){
-#   
-#   ff <- 
-#     dir_derived %>% 
-#     list.files() %>% 
-#     str_subset(dom) %>% #str_subset("wetbulb") %>% .[1] -> f
-#     str_subset(derived_var)
-#   
-#   
-#   map_dfr(ff, function(f){
-#     
-#     gcm_ <- f %>% str_split("_", simplify = T) %>% .[,5] %>% str_remove(".nc")
-#     
-#     
-    # thresholds %>%
-    #   filter(str_detect(Model, str_glue("{gcm_}$"))) %>%
-    #   filter(wl == "1.0") %>%
-    #   select(Model) %>%
-    #   mutate(gcm = gcm_,
-    #          dom = dom)
-#     
-#   })
-#   
-#   
-# }) %>% View()
-#   
 

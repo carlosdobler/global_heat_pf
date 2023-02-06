@@ -49,6 +49,7 @@ tb_vars <-
 # tb_vars %>%
 #   write_csv("/mnt/bucket_mine/pf_variable_table.csv")
 
+# tb_vars %>% mutate(parallel = c("y", "y", "y", "n", "y", "y","y", "y", "y", "y","y", "y", "y", "y", "n", "y", "y", "n", "-", "-","-", "-", "y", "-", "-")) -> tb_vars
 
 # tb_vars <- 
 #   tibble(

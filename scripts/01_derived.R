@@ -30,7 +30,11 @@ library(units)
 options(future.fork.enable = T)
 plan(multicore)
 
-source("scripts/functions.R")
+
+# load main function to calculate derived vars
+source("scripts/fn_derived.R") 
+source("scripts/functions.R") # other functions
+
 
 dir_cordex <- "/mnt/bucket_cmip5/RCM_regridded_data"
 dir_derived <- "/mnt/bucket_mine/results/global_heat_pf/01_derived"
@@ -56,13 +60,15 @@ for(dom in doms){
   # assemble table of needed files for calculation
   tb_files <-
     str_split(var_input, "[+]") %>% .[[1]] %>% # in case > 1 variable 
-    map_dfr(fn_data_table)
+    map_dfr(fn_data_table) %>% 
+    
+    filter(str_detect(file, "MISSING", negate = T))
   
   # extract models
   tb_models <-
     unique(tb_files[, c("gcm", "rcm")])
   
-  # ignore reggie in these domains  
+  # ignore RegCM in these domains  
   if(dom %in% c("SAM", "AUS", "CAS")){
     
     tb_models <- 
@@ -70,7 +76,6 @@ for(dom in doms){
       filter(str_detect(rcm, "RegCM", negate = T))
     
   }
-  
   
   
   
@@ -198,7 +203,7 @@ for(dom in doms){
       str_subset("yrsplit")
     
     if(length(bad_remnants) > 0){
-      print(str_glue("   ({length(bad_remnants)} bad files - deleted)"))
+      print(str_glue("   ({length(bad_remnants)} bad file(s) - deleted)"))
       
       bad_remnants %>% 
         walk(file.remove)
@@ -239,50 +244,43 @@ for(dom in doms){
     })
     
     
+    
     ## CALCULATE DERIVED VARIABLES --------------------------------------------
     
     # This section calculates derived variables from the concatenated file.
-    # All derived variables that use the same input var are calculated at once. 
-    # This section calls another script (derived_fns.R) that contains all the 
-    # functions to perform the necessary calculations depending on the derived
-    # variable to obtain.
+    # All derived variables that use the same input variable are calculated 
+    # at once. This step uses function "fn_derived" from the "fn_derived.R" 
+    # file loaded in the SETUP section above. Refer to it to see how each 
+    # derived variable was obtained.
     
     
-    print(str_glue("Processing derived variables [{rcm_}] [{gcm_}]"))
+    print(str_glue("Calculating derived variables [{rcm_}] [{gcm_}]"))
     
-    # identify vars to derive from input var
-    derived_vars <- 
+    # identify all vars to derive from input var
+    tb_derived_vars <-
       tb_vars %>%
-      filter(var_input == {{var_input}}) %>% 
-      pull(var_derived)  
+      filter(var_input == {{var_input}})
     
-    # loop through derived vars
-    for(derived_var in derived_vars){
+    # process variables not eligible for parallelization
+    tb_derived_vars_np <- 
+      tb_derived_vars %>% 
+      filter(parallel == "n")
     
-      print(str_glue("   {derived_var}"))
-      
-      outfile <-
-        str_glue("{dir_derived}/{dom}_{derived_var}_yr_{rcm_}_{gcm_}.nc")
-      
-      if(file.exists(outfile)){
-        file.remove(outfile)
-        print(str_glue("      (replacing derived file)"))
-      }
-      
-      # call script with functions
-      source("scripts/derived_fns.R")
-      
-      # verify correct time dimension
-      time_steps <- 
-        str_glue("{dir_derived}/{dom}_{derived_var}_yr_{rcm_}_{gcm_}.nc") %>% 
-        read_ncdf(proxy = T, make_time = F) %>%
-        suppressMessages() %>% 
-        suppressWarnings() %>% 
-        st_get_dimension_values("time") %>% 
-        length()
-      
-      print(str_glue("      Done: new file with {time_steps} timesteps"))
-      
+    if(nrow(tb_derived_vars_np) > 0){
+      pwalk(tb_derived_vars_np, function(var_derived, ...){
+        fn_derived(var_derived)
+      })
+    }
+    
+    # process variables eligible for parallelization
+    tb_derived_vars_p <- 
+      tb_derived_vars %>% 
+      filter(parallel == "y")
+    
+    if(nrow(tb_derived_vars_p) > 0){
+      future_pwalk(tb_derived_vars_p, function(var_derived, ...){
+        fn_derived(var_derived)
+      })
     }
     
     # delete concatenated file
