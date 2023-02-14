@@ -1,5 +1,5 @@
 ---
-title: "Land module exhibits"
+title: "Water module exhibits"
 author: "Carlos Dobler -"
 date: "2023-02-13"
 output: github_document
@@ -69,14 +69,6 @@ fn_plot <- function(x1, y1, slices = c(1,4,6), type, u){
            lat < y1+50) %>% 
     as_tibble()
   
-  tb_deserts <- 
-    tb %>% 
-    filter(mean == -99999)
-  
-  tb <- 
-    tb %>% 
-    filter(mean != -99999)
-  
   dif <- 
     tb %>% 
     pull(mean) %>% 
@@ -96,9 +88,9 @@ fn_plot <- function(x1, y1, slices = c(1,4,6), type, u){
     }
     
     p <- 
-      ggplot() +
-      geom_raster(data = tb, aes(lon, lat, fill = mean)) +
-      geom_raster(data = tb_deserts, fill = "grey70", aes(lon, lat)) +
+      tb %>% 
+      ggplot(aes(lon, lat, fill = mean)) +
+      geom_raster() +
       facet_wrap(~wl, ncol = 3) +
       theme(axis.title = element_blank(),
             legend.position = "bottom") +
@@ -142,13 +134,13 @@ fn_plot <- function(x1, y1, slices = c(1,4,6), type, u){
 ```
 
 
-## Change in water balance
+## Change in total annual precipitation
 ```{r}
 
 s <- 
   dir_mosaicked %>% 
   list.files(full.names = T) %>%
-  str_subset(str_glue("{derived_vars[23]}_")) %>% 
+  str_subset(str_glue("{derived_vars[17]}_")) %>% 
   str_subset("v02") %>% 
   read_ncdf(var = "mean") %>% 
   setNames("mean")
@@ -160,7 +152,7 @@ s[is.na(land_rast_0.2)] <- NA
 
 pmap(windows, function(x1,y1){
   
-  fn_plot(x1,y1, slices = c(2,4,6), type = "div", u = "z-score")  
+  fn_plot(x1,y1, slices = c(2,4,6), type = "div", u = "mm")  
   
 }) %>%
   wrap_plots(ncol = 1)
@@ -168,22 +160,22 @@ pmap(windows, function(x1,y1){
 ```
 
 
-## Likelihood of year-plus drought
+## Change in 90 wettest days
 ```{r}
 
 s <- 
   dir_mosaicked %>% 
   list.files(full.names = T) %>%
-  str_subset(str_glue("{derived_vars[24]}_")) %>% 
+  str_subset(str_glue("{derived_vars[18]}_")) %>% 
   str_subset("v02") %>% 
-  read_ncdf(var = "perc50") %>% 
+  read_ncdf(var = "mean") %>% 
   setNames("mean")
 
 s[is.na(land_rast_0.2)] <- NA
 
 pmap(windows, function(x1,y1){
   
-  fn_plot(x1,y1, slices = c(2,4,6), type = "seq", u = "prob.")  
+  fn_plot(x1,y1, slices = c(2,4,6), type = "div", u = "mm")  
   
 }) %>%
   wrap_plots(ncol = 1)
@@ -191,27 +183,49 @@ pmap(windows, function(x1,y1){
 ```
 
 
-## Likelihood year-plus extreme drought
+## Change in snowy days
 ```{r}
 
 s <- 
   dir_mosaicked %>% 
   list.files(full.names = T) %>%
-  str_subset(str_glue("{derived_vars[25]}_")) %>% 
+  str_subset(str_glue("{derived_vars[21]}_")) %>% 
   str_subset("v02") %>% 
-  read_ncdf(var = "perc50") %>% 
+  read_ncdf(var = "mean") %>% 
   setNames("mean")
 
 s[is.na(land_rast_0.2)] <- NA
 
 pmap(windows, function(x1,y1){
   
-  fn_plot(x1,y1, slices = c(2,4,6), type = "seq", u = "prob.")  
+  fn_plot(x1,y1, slices = c(2,4,6), type = "div", u = "days")  
   
 }) %>%
   wrap_plots(ncol = 1)
 
 ```
 
+
+## Change in dry hot days
+```{r}
+
+s <- 
+  dir_mosaicked %>% 
+  list.files(full.names = T) %>%
+  str_subset(str_glue("{derived_vars[22]}_")) %>% 
+  str_subset("v02") %>% 
+  read_ncdf(var = "mean") %>% 
+  setNames("mean")
+
+s[is.na(land_rast_0.2)] <- NA
+
+pmap(windows, function(x1,y1){
+  
+  fn_plot(x1,y1, slices = c(2,4,6), type = "div", u = "days")  
+  
+}) %>%
+  wrap_plots(ncol = 1)
+
+```
 
 

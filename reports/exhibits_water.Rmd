@@ -1,7 +1,7 @@
 ---
-title: "Precipitation exhibits"
+title: "Water module exhibits"
 author: "Carlos Dobler -"
-date: "2022-11-15"
+date: "2023-02-13"
 output: github_document
 ---
 
@@ -9,27 +9,34 @@ output: github_document
 knitr::opts_chunk$set(echo = F,
                       message = F,
                       warning = F,
-                      fig.height=18,#32, 
-                      fig.width=9, 
-                      out.width="100%")
+                      fig.height=4.1*7,#32, 
+                      fig.width=9.7, 
+                      out.width="95%")
 
 
-source(here::here("scripts/setup.R"))
+library(tidyverse)
+library(lubridate)
+library(stars)
+library(furrr)
+library(units)
+library(colorspace)
 library(patchwork)
 
-# var_input <- "precipitation"
+dir_mosaicked <- "/mnt/bucket_mine/results/global_heat_pf/03_mosaicked/"
+
+tb_vars <-
+  read_csv("/mnt/bucket_mine/pf_variable_table.csv") %>% 
+  suppressMessages()
 
 derived_vars <- 
   tb_vars %>% 
-  .[17:22,] %>% 
   pull(final_name)
 
-dir_results <- "/mnt/bucket_mine/results/global_heat_pf/03_mosaicked/"
+dir_mosaicked <- "/mnt/bucket_mine/results/global_heat_pf/03_mosaicked/"
 
-windows <- tibble(area = c("NAM", "SAM", "AFR", "CAS", "AUS"),
-                  x1 = c(-130, -100, -15, 30, 95),
-                  y1 = c(15, -20, 0, 15, -35))
 
+windows <- tibble(x1 = c(-130, -90, -15,   5, 40, 75,  95),
+                  y1 = c(  10, -30,   5, -25, 10, 20, -35))
 
 
 land_pol <- 
@@ -47,14 +54,15 @@ land_rast_0.1 <-
   st_as_stars(dx = 0.1, dy = 0.1, values = NA) %>% 
   {st_rasterize(land_pol, .)}
 
+wls <- seq(0.5, 3, 0.5)
 
-fn_plot <- function(x1, y1, slices = c(2,4,6), ...){
+fn_plot <- function(x1, y1, slices = c(1,4,6), type, u){
   
   tb <- 
     s %>% 
-    slice(warming_levels, slices) %>%
-    st_set_dimensions("warming_levels", value = 1:3) %>%
-    select(mean) %>% 
+    slice(wl, slices) %>%
+    st_set_dimensions("wl", value = wls[slices]) %>%
+    # select(mean) %>% 
     filter(lon > x1,
            lon < x1+60,
            lat > y1,
@@ -74,25 +82,46 @@ fn_plot <- function(x1, y1, slices = c(2,4,6), ...){
     if(diff(q) > 0.001){
       
       tb <- 
-      tb %>% 
-      mutate(mean = raster::clamp(mean, q[1], q[2]))
+        tb %>% 
+        mutate(mean = raster::clamp(mean, q[1], q[2]))
       
     }
     
-    
-    tb %>% 
+    p <- 
+      tb %>% 
       ggplot(aes(lon, lat, fill = mean)) +
       geom_raster() +
-      colorspace::scale_fill_binned_sequential("plasma",
-                                               rev = F,
-                                               na.value = "transparent",
-                                               name = NULL,
-                                               n.breaks = 9) +
-      facet_wrap(~warming_levels, ncol = 3) +
+      facet_wrap(~wl, ncol = 3) +
       theme(axis.title = element_blank(),
             legend.position = "bottom") +
       coord_equal() +
-      guides(fill = guide_colourbar(barwidth = 25, barheight = 0.5, ticks = F))
+      scale_x_continuous(expand = c(0, 0)) +
+      scale_y_continuous(expand = c(0, 0)) +
+      guides(fill = guide_colourbar(barwidth = 15, 
+                                    barheight = 0.5, 
+                                    ticks = F, 
+                                    show.limits = T
+                                    )
+             )
+    
+    if(type == "seq"){
+      
+      p +
+        scale_fill_continuous_sequential("plasma",
+                                         rev = F,
+                                         na.value = "transparent",
+                                         name = str_glue("{u}  "))
+      
+    } else if(type == "div"){
+      
+      p +
+        scale_fill_continuous_divergingx("temps",
+                                         rev = T,
+                                         na.value = "transparent",
+                                         name = str_glue("{u}  "))
+      
+      
+    }
   
   } else {
     
@@ -105,40 +134,51 @@ fn_plot <- function(x1, y1, slices = c(2,4,6), ...){
 ```
 
 
-## Change in total annual precip
+## Change in total annual precipitation
 ```{r}
 
 s <- 
-  dir_results %>% 
+  dir_mosaicked %>% 
   list.files(full.names = T) %>%
-  str_subset(str_glue("{derived_vars[1]}_")) %>% 
-  read_ncdf(var = "mean")
+  str_subset(str_glue("{derived_vars[17]}_")) %>% 
+  str_subset("v02") %>% 
+  read_ncdf(var = "perc50") %>% 
+  setNames("mean")
 
 land_rast_0.2 <- 
-  st_warp(land_rast_0.1, s %>% slice(warming_levels, 1))
+  st_warp(land_rast_0.1, s %>% slice(wl, 1))
 
 s[is.na(land_rast_0.2)] <- NA
 
-pmap(windows, fn_plot) %>%
+pmap(windows, function(x1,y1){
+  
+  fn_plot(x1,y1, slices = c(2,4,6), type = "div", u = "mm")  
+  
+}) %>%
   wrap_plots(ncol = 1)
 
 ```
 
 
-## Change in wettest 90 days
+## Change in 90 wettest days
 ```{r}
 
 s <- 
-  dir_results %>% 
+  dir_mosaicked %>% 
   list.files(full.names = T) %>%
-  str_subset(str_glue("{derived_vars[2]}_")) %>%
-  read_ncdf(var = "mean")
+  str_subset(str_glue("{derived_vars[18]}_")) %>% 
+  str_subset("v02") %>% 
+  read_ncdf(var = "perc50") %>% 
+  setNames("mean")
 
 s[is.na(land_rast_0.2)] <- NA
 
-pmap(windows, fn_plot) %>%
+pmap(windows, function(x1,y1){
+  
+  fn_plot(x1,y1, slices = c(2,4,6), type = "div", u = "mm")  
+  
+}) %>%
   wrap_plots(ncol = 1)
-
 
 ```
 
@@ -146,17 +186,22 @@ pmap(windows, fn_plot) %>%
 ## Change in snowy days
 ```{r}
 
-s <-
-  dir_results %>%
+s <- 
+  dir_mosaicked %>% 
   list.files(full.names = T) %>%
-  str_subset(str_glue("{derived_vars[5]}_")) %>%
-  read_ncdf(var = "mean")
+  str_subset(str_glue("{derived_vars[21]}_")) %>% 
+  str_subset("v02") %>% 
+  read_ncdf(var = "perc50") %>% 
+  setNames("mean")
 
 s[is.na(land_rast_0.2)] <- NA
 
-pmap(windows, fn_plot) %>%
+pmap(windows, function(x1,y1){
+  
+  fn_plot(x1,y1, slices = c(2,4,6), type = "div", u = "days")  
+  
+}) %>%
   wrap_plots(ncol = 1)
-
 
 ```
 
@@ -164,52 +209,23 @@ pmap(windows, fn_plot) %>%
 ## Change in dry hot days
 ```{r}
 
-s <-
-  dir_results %>%
-  list.files(full.names = T) %>%
-  str_subset(str_glue("{derived_vars[6]}_")) %>%
-  read_ncdf(var = "mean")
-
-s[is.na(land_rast_0.2)] <- NA
-
-pmap(windows, fn_plot) %>%
-  wrap_plots(ncol = 1)
-
-```
-
-
-## Change in precip. 100 yr storm
-```{r}
-
 s <- 
-  dir_results %>% 
+  dir_mosaicked %>% 
   list.files(full.names = T) %>%
-  str_subset(str_glue("{derived_vars[3]}_")) %>%
-  read_ncdf(var = "mean")
+  str_subset(str_glue("{derived_vars[22]}_")) %>% 
+  str_subset("v02") %>% 
+  read_ncdf(var = "perc50") %>% 
+  setNames("mean")
 
 s[is.na(land_rast_0.2)] <- NA
 
-pmap(windows, fn_plot) %>%
+pmap(windows, function(x1,y1){
+  
+  fn_plot(x1,y1, slices = c(2,4,6), type = "div", u = "days")  
+  
+}) %>%
   wrap_plots(ncol = 1)
-
 
 ```
 
-
-## Change in frequency 100 yr storm
-```{r}
-
-s <- 
-  dir_results %>% 
-  list.files(full.names = T) %>%
-  str_subset(str_glue("{derived_vars[4]}_")) %>%
-  read_ncdf(var = "mean")
-
-s[is.na(land_rast_0.2)] <- NA
-
-pmap(windows, fn_plot, c(1,3,5)) %>%
-  wrap_plots(ncol = 1)
-
-
-```
 

@@ -1,28 +1,20 @@
-Precipitation exhibits
+Water module exhibits
 ================
 Carlos Dobler -
-2022-11-15
+2023-02-13
 
-## Change in total annual precip
+## Change in total annual precipitation
 
-<img src="exhibits_water_files/figure-gfm/unnamed-chunk-1-1.png" width="100%" />
+<img src="exhibits_water_files/figure-gfm/unnamed-chunk-1-1.png" width="95%" />
 
-## Change in wettest 90 days
+## Change in 90 wettest days
 
-<img src="exhibits_water_files/figure-gfm/unnamed-chunk-2-1.png" width="100%" />
+<img src="exhibits_water_files/figure-gfm/unnamed-chunk-2-1.png" width="95%" />
 
 ## Change in snowy days
 
-<img src="exhibits_water_files/figure-gfm/unnamed-chunk-3-1.png" width="100%" />
+<img src="exhibits_water_files/figure-gfm/unnamed-chunk-3-1.png" width="95%" />
 
 ## Change in dry hot days
 
-<img src="exhibits_water_files/figure-gfm/unnamed-chunk-4-1.png" width="100%" />
-
-## Change in precip. 100 yr storm
-
-<img src="exhibits_water_files/figure-gfm/unnamed-chunk-5-1.png" width="100%" />
-
-## Change in frequency 100 yr storm
-
-<img src="exhibits_water_files/figure-gfm/unnamed-chunk-6-1.png" width="100%" />
+<img src="exhibits_water_files/figure-gfm/unnamed-chunk-4-1.png" width="95%" />
