@@ -14,3 +14,7 @@ Carlos Dobler -
 ## Likelihood year-plus extreme drought
 
 <img src="exhibits_land_files/figure-gfm/unnamed-chunk-3-1.png" width="95%" />
+
+## Change in wildfire days
+
+<img src="exhibits_land_files/figure-gfm/unnamed-chunk-4-1.png" width="95%" />
