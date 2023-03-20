@@ -14,7 +14,7 @@ var_input <-
     
     # land module
     "spei",
-    "fwi")[1] # choose input variable to process
+    "fire_weather_index")[9] # choose input variable to process
 
 
 
@@ -66,7 +66,8 @@ for(dom in doms){
   
   # extract models
   tb_models <-
-    unique(tb_files[, c("gcm", "rcm")])
+    unique(tb_files[, c("gcm", "rcm")]) %>% 
+    arrange(rcm, gcm)
   
   # ignore RegCM in these domains  
   if(dom %in% c("SAM", "AUS", "CAS")){
@@ -126,6 +127,29 @@ for(dom in doms){
     "   Done: {length(list.files(dir_raw_data))} / {nrow(tb_files_mod)} files downloaded" %>% 
       str_glue() %>% 
       print()
+    
+    
+    
+    ## 
+    
+    if(str_detect(var_input, "fire") & str_detect(rcm_, "REMO")){
+      
+      future_pwalk(tb_files_mod, function(file, t_i, ...){
+        
+        infile <- str_glue("{dir_raw_data}/{file}")
+        outfile <- infile %>% str_replace(".nc", "_fixed_time.nc")
+        
+        "cdo -setcalendar,365_day -settaxis,{as.character(ymd(t_i))},12:00:00,1day {infile} {outfile}" %>% 
+          str_glue %>% 
+          system(ignore.stdout = T, ignore.stderr = T)
+        
+        file.remove(infile)
+        
+        file.rename(outfile, infile)
+        
+      })
+      
+    }
     
     
     
@@ -262,10 +286,10 @@ for(dom in doms){
       filter(var_input == {{var_input}})
     
     # process variables not eligible for parallelization
-    tb_derived_vars_np <- 
-      tb_derived_vars %>% 
+    tb_derived_vars_np <-
+      tb_derived_vars %>%
       filter(parallel == "n")
-    
+
     if(nrow(tb_derived_vars_np) > 0){
       pwalk(tb_derived_vars_np, function(var_derived, ...){
         fn_derived(var_derived)

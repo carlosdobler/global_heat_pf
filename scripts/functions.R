@@ -112,6 +112,44 @@ fn_data_table <- function(vari){
         
         
         
+      } else if(str_detect(vari, "fire")){
+        
+        dd %>% 
+          list.files() %>%
+          str_subset(".nc$") %>%
+          str_subset(".*_[:digit:]*-[:digit:]*.nc") %>%
+          
+          map_dfr(function(d){
+            
+            tibble(file = d) %>%
+              
+              mutate(
+                
+                var = "fwi",
+                
+                gcm = file %>%
+                  str_split("_", simplify = T) %>%
+                  .[ , i+3],
+                
+                rcm = rcm_,
+                
+                t_i = file %>%
+                  str_split("_", simplify = T) %>%
+                  .[ , 6] %>%
+                  str_sub(end = 6) %>% 
+                  str_c("01"),
+                
+                t_f = file %>%
+                  str_split("_", simplify = T) %>%
+                  .[ , 6] %>%
+                  str_sub(start = 10, end = 15) %>% 
+                  str_c("01"),
+                
+                loc = dd
+                
+              )
+          })
+        
       } else {
         
         dd %>% 
@@ -192,7 +230,7 @@ fn_data_table <- function(vari){
               str_split("_", simplify = T) %>%
               .[ , 3],
             
-            rcm = rcm_,
+            rcm = "REMO2015",
             
             t_i = file %>%
               str_split("_", simplify = T) %>%
@@ -222,6 +260,77 @@ fn_data_table <- function(vari){
 
 
 # *****************
+
+
+
+fn_tiling <- function(proxy_map){
+  
+  # size of tile (approximate number of cells in each dim)
+  sz <- 50
+  
+  
+  # obtain chunks of longitude
+  
+  d_lon <- 
+    proxy_map %>% 
+    dim() %>% 
+    .[1] %>% 
+    seq_len()
+  
+  n_lon <- 
+    round(length(d_lon)/sz)
+  
+  lon_chunks <- 
+    split(d_lon, 
+          ceiling(seq_along(d_lon)/(length(d_lon)/n_lon))) %>% 
+    map(~c(first(.x), last(.x)))
+  
+  
+  # obtain chunks of latitude
+  
+  d_lat <- 
+    proxy_map %>% 
+    dim() %>% 
+    .[2] %>% 
+    seq_len()
+  
+  n_lat <- 
+    round(length(d_lat)/sz)
+  
+  lat_chunks <- 
+    split(d_lat, 
+          ceiling(seq_along(d_lat)/(length(d_lat)/n_lat))) %>% 
+    map(~c(first(.x), last(.x)))
+  
+  
+  # results
+  return(list(lon_chunks = lon_chunks,
+              lat_chunks = lat_chunks))
+  
+  
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 # Wrapper of the function to calculate derived variables (fn_derived), with 
 # added functionality to overwrite results and verify correct time dimension.
@@ -380,7 +489,7 @@ fn_data_table <- function(vari){
 
 
 
-fn_write_nc <- function(star_to_export, filename){
+fn_write_nc <- function(star_to_export, filename, name_3rd_dim, un_3rd_dim = "", un = ""){
   
   if(file.exists(filename)){
     file.remove(filename)
@@ -401,18 +510,16 @@ fn_write_nc <- function(star_to_export, filename){
                                 st_get_dimension_values(2) %>% 
                                 round(1))
   
-  dim_time <- ncdf4::ncdim_def(name = "wl", 
-                               units = "", 
+  dim_time <- ncdf4::ncdim_def(name = name_3rd_dim, 
+                               units = un_3rd_dim, 
                                vals = star_to_export %>% 
-                                 st_get_dimension_values(3) %>% 
-                                 as.double()
-                               )
+                                 st_get_dimension_values(3))
   
   # define variables
   varis <- 
     names(star_to_export) %>% 
     map(~ncdf4::ncvar_def(name = all_of(.x),
-                          units = "",
+                          units = un,
                           dim = list(dim_lon, dim_lat, dim_time), 
                           missval = -999999))
   

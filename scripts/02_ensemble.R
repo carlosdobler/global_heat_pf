@@ -6,31 +6,32 @@ derived_vars <-
     "days-gte-38C-tasmax",
     "ten-hottest-days-tasmax",
     "mean-tasmax",
-    "days-lt-0C-tasmax",
+    "days-lt-0C-tasmax", # 6
     
     "days-gte-20C-tasmin",
     "days-gte-25C-tasmin",
     "mean-tasmin",
-    "days-lt-0C-tasmin",
+    "days-lt-0C-tasmin", # 10
     
     "days-gte-26C-wetbulb",
     "days-gte-28C-wetbulb",
     "days-gte-30C-wetbulb",
     "days-gte-32C-wetbulb",
-    "ten-hottest-days-wetbulb",
+    "ten-hottest-days-wetbulb", # 15
     
     "mean-tasmean",
     
     "total-precip",
     "ninety-wettest-days",
-    "100yr-storm-precip",
-    "100yr-storm-freq",
+    # "100yr-storm-precip",
+    # "100yr-storm-freq",
     "days-gte-1mm-precip-lt-0C-tasmean",
-    "days-lt-b10thperc-precip-gte-b90thperc-tasmax",
+    "days-gte-b90perc-tasmax-lt-b10perc-precip",
     
     "mean-spei",
     "prop-months-lte-neg0.8-spei",
-    "prop-months-lte-neg1.6-spei")[1:15] # choose derived variable(s) to assemble
+    "prop-months-lte-neg1.6-spei",
+    "days-gte-b95perc-fwi")[24] # choose derived variable(s) to assemble
 
 
 
@@ -226,6 +227,31 @@ for(dom in doms){
     })
     
     
+    ## 
+    
+    print("   ...warping...")
+    
+    size_rasters <- l_s %>% map(dim) %>% map_int(~.x[1]*.x[2])
+    
+    if(size_rasters %>% unique() %>% length() %>% {. > 1}){
+      
+      smallest <- size_rasters %>% which.min()
+      
+      larger <- which(size_rasters != size_rasters[smallest])
+      
+      l_s[larger] <- 
+        
+        l_s[larger] %>% 
+        map(function(s){
+          
+          st_warp(s, l_s[[smallest]] %>% slice(time, 1))
+          
+        })
+      
+    }
+    
+    
+    
     
     
     ## SLICE BY WARMING LEVELS ------------------------------------------------
@@ -329,7 +355,7 @@ for(dom in doms){
     s_result <-
       l_s_wl_stats %>%
       {do.call(c, c(., along = "wl"))} %>%
-      st_set_dimensions(3, values = wls)
+      st_set_dimensions(3, values = as.numeric(wls))
     
     
     
@@ -342,7 +368,7 @@ for(dom in doms){
         "{dir_ensembled}/{dom}_{derived_var}_ensemble.nc"
       )
     
-    fn_write_nc(s_result, res_filename)
+    fn_write_nc(s_result, res_filename, "wl")
     
     
   }

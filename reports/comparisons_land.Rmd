@@ -1,0 +1,347 @@
+---
+title: "Comparisons: Land"
+author: "Carlos Dobler -"
+date: "`r Sys.Date()`"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = F,
+                      message = F,
+                      warning = F,
+                      fig.height=4.1*3,#32, 
+                      fig.width=9.7, 
+                      out.width="95%")
+
+
+library(tidyverse)
+library(lubridate)
+library(stars)
+library(furrr)
+library(units)
+library(colorspace)
+library(patchwork)
+library(colorspace)
+
+dir_mosaicked <- "/mnt/bucket_mine/results/global_heat_pf/03_mosaicked"
+dir_originals <- "/mnt/pers_disk/originals"
+
+# if(dir.exists(dir_originals)){
+#   unlink(dir_originals, recursive = T)
+#   dir.create(dir_originals)
+#   "gsutil -m cp gs://wcdi_production/land_module/rcm_regcm_remo/*.nc {dir_originals}/" %>%
+#   str_glue() %>%
+#   system()
+# }
+
+
+tb_vars <-
+  read_csv("/mnt/bucket_mine/pf_variable_table.csv") %>% 
+  suppressMessages() %>% 
+  .[23:26,] %>% 
+  mutate(var_orig = c("mean-spei-12",
+                      "probabilityD1over-spei-12",
+                      "probabilityD3over-spei-12",
+                      "annual_sum_days_fwi_above_19722000_95pctl"
+                      )) %>% 
+  select(final_name, var_orig) %>% 
+  rbind(c("climate-zones", "koppen"))
+
+
+
+land_pol <- 
+  "/mnt/bucket_mine/misc_data/ne_110m_land/" %>% 
+  st_read() %>%
+  mutate(a = 1) %>% 
+  select(a)
+
+land_rast_0.1 <- 
+  c(st_point(c(-180, -90)),
+  st_point(c(180, 90))) %>%
+  st_bbox() %>%
+  st_set_crs(4326) %>% 
+  st_as_stars(dx = 0.1, dy = 0.1, values = NA) %>% 
+  {st_rasterize(land_pol, .)}
+
+
+
+
+
+func_maps <- function(i, slices = c(1,3,6)){
+  
+  final_name <- tb_vars$final_name[i]
+  var_orig <- tb_vars$var_orig[i]
+
+  s_old <- 
+    dir_originals %>%
+    list.files(full.names = T) %>% 
+    str_subset(var_orig) %>%
+    read_ncdf(make_time = F) %>% 
+    select(2) %>% 
+    slice(time, slices)
+  
+  if(str_detect(names(s_old), "median")){
+    stat <- "perc50"
+  } else {
+    stat <- "mean"
+  }
+  
+  s_new <- 
+    dir_mosaicked %>% 
+    list.files(full.names = T) %>% 
+    str_subset(str_glue("{final_name}_")) %>%
+    str_subset("v02") %>% 
+    read_ncdf(var = stat) %>% 
+    st_set_dimensions("wl", values = seq(0.5, 3, by = 0.5)) %>% 
+    slice(wl, slices) %>% 
+    setNames("v")
+  
+  s_old <- 
+    s_old %>% 
+    st_warp(s_new) %>% 
+    setNames("v") %>%
+    mutate(v = set_units(v, NULL),
+           v = ifelse(v == -99999, NA, v))
+  
+  list(s_new, s_old)
+}
+
+
+
+func_land <- function(m, mask){
+  
+  m[is.na(mask)] <- NA
+  return(m)
+  
+}
+
+
+
+
+func_plot <- function(foo, clamp = NA, bks = NA, nm){
+  
+  tb <- 
+    foo %>% 
+    as_tibble()
+
+  if(all(!is.na(clamp))){
+    tb <-
+      tb %>% 
+      mutate(v = raster::clamp(v, clamp[1], clamp[2]))
+  }
+  
+  p <- 
+    tb %>% 
+    ggplot(aes(lon, lat, fill = v)) +
+    geom_raster() +
+    facet_wrap(~wl, ncol = 1) +
+    coord_equal(ylim = c(-60, 78), xlim = c(-160, 155)) +
+    theme(axis.title = element_blank(),
+          legend.position = "bottom") +
+    
+    scale_x_continuous(expand = c(0, 0)) +
+    scale_y_continuous(expand = c(0, 0)) +
+    
+    guides(fill = guide_coloursteps(barwidth = 20, 
+                                    barheight = 0.5, 
+                                    ticks = F, 
+                                    show.limits = F,
+                                    even.steps = F))
+  
+  
+  
+  if(all(!is.na(bks))){
+    
+    p <- 
+      p + 
+      scale_fill_binned_diverging("blue-red3",
+                                  rev = T,
+                                  na.value = "transparent",
+                                  breaks = bks,
+                                  name = str_glue("{nm}   "))
+    
+  } else {
+    
+    p <- 
+      p + 
+      scale_fill_binned_diverging("blue-red3",
+                                  rev = T,
+                                  na.value = "transparent",
+                                  name = str_glue("{nm}   "))
+    
+  }
+      
+  return(p)
+    
+}
+
+
+```
+
+
+## Change in water balance
+```{r}
+
+m <- func_maps(1, slices = c(2,4,6))
+
+land_rast_0.2 <- 
+  st_warp(land_rast_0.1, m[[1]] %>% slice(wl, 1))
+
+m <- 
+  m %>% 
+  map(func_land, land_rast_0.2)
+
+m[[2]] <- 
+  m[[2]] %>% 
+  mutate(v = ifelse(v == -88888, -99999, v))
+
+s_diff <- m[[1]] - m[[2]]
+
+func_plot(foo = s_diff,
+          clamp = c(-1.5,1.5),
+          bks = c(-1.5, -1, -0.6, -0.3, -0.1, 0.1, 0.3, 0.6, 1, 1.5),
+          nm = "z-score")
+
+
+```
+
+
+## Probability of year-plus drought
+```{r}
+
+m <- 
+  func_maps(2, slices = c(2,4,6)) %>% 
+  map(func_land, land_rast_0.2)
+
+m[[2]] <- 
+  m[[2]] %>% 
+  mutate(v = ifelse(v == -88888, -99999, v/100))
+
+s_diff <- m[[1]] - m[[2]]
+
+func_plot(foo = s_diff,
+          clamp = c(-0.6,0.6),
+          bks = c(-0.6, -0.4, -0.2, -0.05, 0.05, 0.2, 0.4, 0.6),
+          nm = "probability")
+
+```
+
+
+## Probability of year-plus extreme drought
+```{r}
+
+m <- 
+  func_maps(3, slices = c(2,4,6)) %>% 
+  map(func_land, land_rast_0.2)
+
+m[[2]] <- 
+  m[[2]] %>% 
+  mutate(v = ifelse(v == -88888, -99999, v/100))
+
+s_diff <- m[[1]] - m[[2]]
+
+func_plot(foo = s_diff,
+          clamp = c(-0.6,0.6),
+          bks = c(-0.6, -0.4, -0.2, -0.05, 0.05, 0.2, 0.4, 0.6),
+          nm = "probability")
+
+```
+
+
+## Change in wildfire danger days
+```{r}
+
+m <- 
+  func_maps(4, slices = c(2,4,6)) %>% 
+  map(func_land, land_rast_0.2)
+
+m[[2]] <- 
+  m[[2]] %>% 
+  mutate(v = ifelse(v == -88888, -99999, v))
+
+s_diff <- m[[1]] - m[[2]]
+
+func_plot(foo = s_diff,
+          clamp = c(-80, 80),
+          bks = c(-80, -50, -30, -15, -5, 5, 15, 30, 50, 80),
+          nm = "days")
+
+```
+
+
+## Climate zones
+(different classes colored in red)
+```{r}
+
+slices = c(2,4,6)
+
+final_name <- tb_vars$final_name[5]
+var_orig <- tb_vars$var_orig[5]
+
+s_old <- 
+  dir_originals %>%
+  list.files(full.names = T) %>% 
+  str_subset(var_orig) %>%
+  read_ncdf(make_time = F) %>% 
+  select(2) %>% 
+  slice(time, slices)
+
+s_new <- 
+  dir_mosaicked %>% 
+  list.files(full.names = T) %>% 
+  str_subset(str_glue("{final_name}_")) %>%
+  str_subset("v02") %>% 
+  read_ncdf() %>% 
+  st_set_dimensions("wl", values = seq(0.5, 3, by = 0.5)) %>% 
+  slice(wl, slices) %>% 
+  setNames("v")
+  
+s_old <- 
+  s_old %>% 
+  st_warp(s_new) %>% 
+  setNames("v") %>%
+  mutate(v = set_units(v, NULL),
+         v = ifelse(v == -99999, 1, v))
+
+m <- list(s_new, s_old)
+m <- m %>% map(func_land, land_rast_0.2)
+m[[2]] <- m[[2]] %>% st_set_dimensions(3, names = "wl")
+
+s_diff <- 
+  do.call(c, m) %>% 
+  mutate(dif = ifelse(v != v.1, -99999, v)) %>% 
+  select(dif)
+
+
+tb <- 
+  s_diff %>% 
+  as_tibble()
+
+tb_dif <- 
+    tb %>% 
+    filter(dif == -99999)
+  
+tb <- 
+  tb %>% 
+  filter(dif != -99999)
+
+ggplot() +
+  geom_raster(data = tb, aes(lon, lat), fill = "white") +
+  geom_raster(data = tb, aes(lon, lat, fill = factor(dif)), alpha = 0.5) +
+  geom_raster(data = tb_dif, fill = "red", aes(lon, lat)) +
+  facet_wrap(~wl, ncol = 1) +
+  theme(axis.title = element_blank(),
+        legend.position = "bottom") +
+  coord_equal() +
+  scale_x_continuous(expand = c(0, 0)) +
+  scale_y_continuous(expand = c(0, 0)) +
+  scale_fill_brewer(palette = "Set3",
+                    na.value = "transparent",
+                    name = str_glue("Clim code  "),
+                    na.translate = F) +
+  guides(fill = guide_legend(nrow = 1, keywidth = 0.8, keyheight = 0.8))
+
+
+
+```
+

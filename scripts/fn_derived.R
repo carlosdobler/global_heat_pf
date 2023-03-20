@@ -10,10 +10,10 @@ fn_derived <- function(derived_var){
   }
   
   
-# HEAT VOLUME -----------------------------------------------------------------
+  # HEAT VOLUME -----------------------------------------------------------------
   
   
-## MAX TEMPERATURE ------------------------------
+  ## MAX TEMPERATURE ------------------------------
   
   
   if(derived_var == "days-gte-32C-tasmax"){
@@ -120,7 +120,7 @@ fn_derived <- function(derived_var){
     
     
     
-## AVERAGE TEMPERATURE --------------------------
+    ## AVERAGE TEMPERATURE --------------------------
     
     
   } else if(derived_var == "mean-tasmean"){
@@ -130,7 +130,7 @@ fn_derived <- function(derived_var){
     
     
     
-## MIN TEMPERATURE ------------------------------ 
+    ## MIN TEMPERATURE ------------------------------ 
     
     
   } else if(derived_var == "days-gte-20C-tasmin"){
@@ -182,8 +182,8 @@ fn_derived <- function(derived_var){
     
     
     
-## WETBULB TEMPERATURE --------------------------
-
+    ## WETBULB TEMPERATURE --------------------------
+    
     
   } else if(derived_var == "days-gte-26C-wetbulb"){
     
@@ -270,17 +270,18 @@ fn_derived <- function(derived_var){
     
     
     
-# WATER VOLUME ----------------------------------------------------------------
     
-    # PRECIPITATION FUNCTIONS
+    # WATER VOLUME ----------------------------------------------------------------
     
-    # *************************************************************************
+    
+    ## PRECIPITATION --------------------------------
     
     
   } else if(derived_var == "total-precip"){
     
-    str_glue("cdo yearsum {dir_cat}/cat.nc {outfile}") %>%
+    str_glue("cdo yearsum {dir_cat}/{v}_cat.nc {outfile}") %>%
       system(ignore.stdout = T, ignore.stderr = T)
+    
     
     
     # *************
@@ -288,64 +289,22 @@ fn_derived <- function(derived_var){
     
   } else if(derived_var == "ninety-wettest-days"){
     
-    
-    # function to identify annual maximas
-    # while preventing their overlap
-    fn_90_wettest <- function(x){
-      
-      if(any(is.na(x))){
-        
-        pr <- rep(NA, length(all_years))
-        
-      } else {
-        
-        # running sum of 90 days
-        # value assigned to last obs of the window
-        runsum <- 
-          x %>% 
-          slider::slide_dbl(sum, .before = 89, .complete = T, .step = 2)
-        
-        # initialize vector
-        pr <- rep(NA_real_, length(all_years))
-        
-        dy <- 0 # first iteration; no day
-        
-        # loop through years
-        for(i in 1:length(all_years)){
-          
-          time_range <- which(time_dim == all_years[i]) %>% range()
-          
-          # if max is within the last 90 days of the year
-          # shorten the range of time to look for max
-          # so that windows do not overlap
-          if(i != 1 & dy >= time_range[1]-90){
-            
-            dy <- which.max(runsum[(dy+90):time_range[2]])+(dy+90)-1
-            
-          } else {
-            
-            dy <- which.max(runsum[time_range[1]:time_range[2]])+time_range[1]-1
-            
-          }
-          
-          pr[i] <- runsum[dy]
-          
-        }
-      }
-      
-      return(pr)
-      
-    }
-    
-    
-    # process
+    # load a proxy object to obtain dimensions
+    # to tile and get time 
     
     s_proxy <- 
-      str_glue("{dir_cat}/cat.nc") %>% 
+      str_glue("{dir_cat}/{v}_cat.nc") %>% 
       read_ncdf(proxy = T) %>% 
       suppressMessages()
     
-    source("scripts/tiling.R")
+    
+    # obtain tiles
+    
+    chunks_index <- fn_tiling(s_proxy)
+    lon_chunks <- chunks_index$lon_chunks
+    lat_chunks <- chunks_index$lat_chunks
+    
+    # extract years
     
     time_dim <- 
       s_proxy %>% 
@@ -354,31 +313,100 @@ fn_derived <- function(derived_var){
     
     all_years <- time_dim %>% unique()
     
+    
+    # create temporary directory to save tiles
+    
     dir_tmp <- "/mnt/pers_disk/tmp"
     dir.create(dir_tmp)
     
-    foo <- 
-      iwalk(lon_chunks, function(lon_, i_lon){
-        iwalk(lat_chunks, function(lat_, i_lat){
+    
+    # loop through chunks
+    # calculate precip of 90 wettest days for each
+    
+    iwalk(lon_chunks, function(lon_, i_lon){
+      iwalk(lat_chunks, function(lat_, i_lat){
+        
+        print(str_glue("      processing chunk {i_lon} - {i_lat}"))
+        
+        s_proxy[,lon_[1]:lon_[2], lat_[1]:lat_[2],] %>% 
           
-          print(str_glue("      processing chunk {i_lon} - {i_lat}"))
+          st_apply(
+            
+            c(1,2),
+            
+            # function to identify annual maximas
+            # while preventing their overlap:
+            
+            function(x){
+              
+              if(any(is.na(x))){
+                
+                pr <- rep(NA, length(all_years))
+                
+              } else {
+                
+                # running sum of 90 days
+                # value assigned to last obs of the window
+                runsum <- 
+                  x %>% 
+                  slider::slide_dbl(sum, 
+                                    .before = 89, 
+                                    .complete = T, 
+                                    .step = 2)
+                
+                # initialize vector
+                pr <- rep(NA_real_, length(all_years))
+                
+                dy <- 0 # first iteration; no day
+                
+                # loop through years
+                for(i in 1:length(all_years)){
+                  
+                  time_range <- which(time_dim == all_years[i]) %>% range()
+                  
+                  # if max is within the last 90 days of the year
+                  # shorten the range of time to look for max
+                  # so that windows do not overlap
+                  if(i != 1 & dy >= time_range[1]-90){
+                    
+                    dy <- 
+                      which.max(runsum[(dy+90):time_range[2]])+(dy+90)-1
+                    
+                  } else {
+                    
+                    dy <- 
+                      which.max(runsum[time_range[1]:time_range[2]])+time_range[1]-1
+                    
+                  }
+                  
+                  pr[i] <- runsum[dy]
+                  
+                }
+              }
+              
+              return(pr)
+              
+            }, # end of function
+            
+            FUTURE = T,
+            .fname = "time") %>% 
           
-          s_proxy[,lon_[1]:lon_[2], lat_[1]:lat_[2],] %>% 
-            st_apply(c(1,2),
-                     fn_90_wettest,
-                     FUTURE = T,
-                     .fname = "time") %>% 
-            aperm(c(2,3,1)) %>% 
-            st_as_stars(proxy = F)
+          st_as_stars(proxy = F) %>%
+          aperm(c(2,3,1)) %>% 
           
-          write_stars(foo, str_glue("{dir_tmp}/{dom}_tmpfile_{i_lon}_{i_lat}.tif"))
-          
-        })
+          # save chunk
+          write_stars(str_glue("{dir_tmp}/{dom}_tmpfile_{i_lon}_{i_lat}.tif"))
+        
       })
+    })
     
     
-    foo <- 
+    # mosaic chunks row-wise
+    rows_ <- 
       map(seq_along(lat_chunks), function(i_lat){
+        
+        # build a table to sort tiles
+        # and ensure they are imported in order
         tibble(
           file = dir_tmp %>% 
             list.files(full.names = T) %>% 
@@ -388,35 +416,38 @@ fn_derived <- function(derived_var){
           arrange(col) %>% 
           pull(file) %>%
           
+          # import
           read_stars(along = 1)
       })
     
-    bar <- 
-      foo %>% 
-      {do.call(c, c(., along = 2))}
+    # mosaic rows
+    mos <-
+      rows_ %>%
+      {do.call(c, c(., along = 2))} %>%
+      st_set_dimensions(1, names = "lon", values = st_get_dimension_values(s_proxy, "lon")) %>%
+      st_set_dimensions(2, names = "lat", values = st_get_dimension_values(s_proxy, "lat")) %>%
+      st_set_crs(4326) %>%
+      st_set_dimensions(3, 
+                        names = "time", 
+                        values = str_glue("{all_years}0101") %>% 
+                          as_date() %>% 
+                          as.numeric()) %>%
+      setNames("pr")
     
-    fn_write_nc_derived(pull(bar, 1),
-                        outfile,
-                        st_get_dimension_values(s_proxy, "lon"),
-                        st_get_dimension_values(s_proxy, "lat"),
-                        str_glue("{all_years}0101") %>% as_date() %>% as.integer(),
-                        "pr",
-                        "kg/m^2/s")
+    
+    fn_write_nc(mos, outfile, "time", "days since 1970-01-01", un = "kg/m^2/s")
     
     unlink(dir_tmp, recursive = T)
     
     
     
-    # *************
+    ## PRECIP + AVG. TEMPERATURE ------------------
     
-    # needs to be re-run
+    
   } else if(derived_var == "days-gte-1mm-precip-lt-0C-tasmean"){
     
     c("pr", "tas") %>% 
       future_walk(function(v){
-        
-        outfile <- 
-          str_glue("{dir_cat}/{dom}_{v}_{rcm_}_{gcm_}.nc")
         
         if(v == "pr"){
           
@@ -424,7 +455,7 @@ fn_derived <- function(derived_var){
             set_units(kg/m^2/s) %>%
             drop_units() -> lim_v
           
-          str_glue("cdo gec,{lim_v} {dir_cat}/pr_cat.nc {outfile}") %>% 
+          str_glue("cdo gec,{lim_v} {dir_cat}/pr_cat.nc {dir_cat}/pr_step1.nc") %>% 
             system(ignore.stdout = T, ignore.stderr = T)
           
           
@@ -434,7 +465,7 @@ fn_derived <- function(derived_var){
             set_units(K) %>%
             drop_units() -> lim_v
           
-          str_glue("cdo ltc,{lim_v} {dir_cat}/tas_cat.nc {outfile}") %>% 
+          str_glue("cdo ltc,{lim_v} {dir_cat}/tas_cat.nc {dir_cat}/tas_step1.nc") %>% 
             system(ignore.stdout = T, ignore.stderr = T)
           
         }
@@ -443,53 +474,39 @@ fn_derived <- function(derived_var){
     
     
     # joint condition
-    
-    outfile <-
-      str_glue("{dir_derived}/{dom}_{derived_var}_yr_{rcm_}_{gcm_}.nc")
-    
-    str_glue("cdo -yearsum -gec,2 -add {dir_cat}/{dom}_pr_{rcm_}_{gcm_}.nc {dir_cat}/{dom}_tas_{rcm_}_{gcm_}.nc {outfile}") %>% 
+    str_glue("cdo -yearsum -gec,2 -add {dir_cat}/pr_step1.nc {dir_cat}/tas_step1.nc {outfile}") %>% 
       system(ignore.stdout = T, ignore.stderr = T)
     
     
-    # ***************
+    
+    ## PRECIP + MAX. TEMPERATURE ------------------
     
     
-  } else if(derived_var == "days-lt-b10thperc-precip-gte-b90thperc-tasmax"){
+  } else if(derived_var == "days-gte-b90perc-tasmax-lt-b10perc-precip"){
     
     future_walk(c("pr", "tasmax"), function(v){
       
       # params
-      if(v == "pr"){
-        thresh <- 10
-        command <- "ltc"
-      } else {
+      if(v == "tasmax"){
         thresh <- 90
         command <- "gec"
+        
+      } else if(v == "pr") {
+        thresh <- 10
+        command <- "ltc"
       }
       
       # subset baseline
-      outfile_b <- 
-        str_glue("{dir_cat}/{dom}_{v}_{rcm_}_{gcm_}_baseline.nc")
-      
-      str_glue("cdo selyear,1971/2000 {dir_cat}/{v}_cat.nc {outfile_b}") %>% 
+      str_glue("cdo selyear,1971/2000 {dir_cat}/{v}_cat.nc {dir_cat}/{v}_step1.nc") %>% 
         system(ignore.stdout = T, ignore.stderr = T)
       
       # calculate percentile
-      outfile_p <- 
-        str_glue("{dir_cat}/{dom}_{v}_{rcm_}_{gcm_}_perc.nc")
-      
-      str_glue("cdo timpctl,{thresh} {outfile_b} -timmin {outfile_b} -timmax {outfile_b} {outfile_p}") %>% 
+      str_glue("cdo timpctl,{thresh} {dir_cat}/{v}_step1.nc -timmin {dir_cat}/{v}_step1.nc -timmax {dir_cat}/{v}_step1.nc {dir_cat}/{v}_step2.nc") %>% 
         system(ignore.stdout = T, ignore.stderr = T)
       
       # obtain no. days under/above baseline percentile
-      outfile_v <- 
-        str_glue("{dir_cat}/{dom}_{v}_{rcm_}_{gcm_}.nc")
-      
-      str_glue("cdo -{command},0 -sub {dir_cat}/{v}_cat.nc {outfile_p} {outfile_v}") %>% 
+      str_glue("cdo -{command},0 -sub {dir_cat}/{v}_cat.nc {dir_cat}/{v}_step2.nc {dir_cat}/{v}_step3.nc") %>% 
         system(ignore.stdout = T, ignore.stderr = T)
-      
-      file.remove(outfile_b)
-      file.remove(outfile_p)
       
     })
     
@@ -499,6 +516,7 @@ fn_derived <- function(derived_var){
       dir_cat %>% 
       list.files(full.names = T) %>% 
       str_subset("_cat", negate = T) %>% 
+      str_subset("step3") %>% 
       str_flatten(" ")
     
     str_glue("cdo -yearsum -gec,2 -add {ff} {outfile}") %>% 
@@ -507,11 +525,12 @@ fn_derived <- function(derived_var){
     
     
     
-    # ***************************************************************************
     
-    # DRYNESS FUNCTIONS
+    # LAND VOLUME --------------------------------------------------------------
     
-    # ***************************************************************************
+    
+    
+    # SPEI --------------------------------------
     
     
   } else if(derived_var == "mean-spei"){
@@ -520,7 +539,9 @@ fn_derived <- function(derived_var){
       system(ignore.stdout = T, ignore.stderr = T)
     
     
-    # ***************
+    # *************
+    
+    
     
   } else if(derived_var == "prop-months-lte-neg0.8-spei"){
     
@@ -528,12 +549,36 @@ fn_derived <- function(derived_var){
       system(ignore.stdout = T, ignore.stderr = T)
     
     
-    # ***************
+    # *************
+    
+    
     
   } else if(derived_var == "prop-months-lte-neg1.6-spei"){
     
     str_glue("cdo yearmean -lec,-1.6 {dir_cat}/{v}_cat.nc {outfile}") %>%
       system(ignore.stdout = T, ignore.stderr = T)
+    
+    
+    
+    ## FWI --------------------------------------
+    
+    
+    
+  } else if(derived_var == "days-gte-b95perc-fwi"){
+    
+    # subset baseline
+    str_glue("cdo selyear,1972/2000 {dir_cat}/{v}_cat.nc {dir_cat}/{v}_step1.nc") %>% 
+      system(ignore.stdout = T, ignore.stderr = T)
+    
+    # calculate percentile
+    str_glue("cdo timpctl,95 {dir_cat}/{v}_step1.nc -timmin {dir_cat}/{v}_step1.nc -timmax {dir_cat}/{v}_step1.nc {dir_cat}/{v}_step2.nc") %>% 
+      system(ignore.stdout = T, ignore.stderr = T)
+    
+    # obtain no. days above baseline percentile; then sum per year
+    str_glue("cdo -yearsum -gec,0 -sub {dir_cat}/{v}_cat.nc {dir_cat}/{v}_step2.nc {outfile}") %>% 
+      system(ignore.stdout = T, ignore.stderr = T)
+    
+    
     
   }
   
@@ -541,7 +586,7 @@ fn_derived <- function(derived_var){
   
   # verify correct time dimension
   time_steps <-
-    str_glue("{dir_derived}/{dom}_{derived_var}_yr_{rcm_}_{gcm_}.nc") %>%
+    outfile %>%
     read_ncdf(proxy = T, make_time = F) %>%
     suppressMessages() %>%
     suppressWarnings() %>%

@@ -18,3 +18,7 @@ Carlos Dobler -
 ## Change in wildfire days
 
 <img src="exhibits_land_files/figure-gfm/unnamed-chunk-4-1.png" width="95%" />
+
+## Climate zones
+
+<img src="exhibits_land_files/figure-gfm/unnamed-chunk-5-1.png" width="95%" />

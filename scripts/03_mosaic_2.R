@@ -6,31 +6,32 @@ derived_vars <-
     "days-gte-38C-tasmax",
     "ten-hottest-days-tasmax",
     "mean-tasmax",
-    "days-lt-0C-tasmax",
+    "days-lt-0C-tasmax", # 6
     
     "days-gte-20C-tasmin",
     "days-gte-25C-tasmin",
     "mean-tasmin",
-    "days-lt-0C-tasmin",
+    "days-lt-0C-tasmin", # 10
     
     "days-gte-26C-wetbulb",
     "days-gte-28C-wetbulb",
     "days-gte-30C-wetbulb",
     "days-gte-32C-wetbulb",
-    "ten-hottest-days-wetbulb",
+    "ten-hottest-days-wetbulb", # 15
     
-    "mean-tasmean",
+    "mean-tasmean", # 16
     
     "total-precip",
     "ninety-wettest-days",
-    "100yr-storm-precip",
-    "100yr-storm-freq",
+    # "100yr-storm-precip",
+    # "100yr-storm-freq",
     "days-gte-1mm-precip-lt-0C-tasmean",
-    "days-lt-b10thperc-precip-gte-b90thperc-tasmax",
+    "days-gte-b90perc-tasmax-lt-b10perc-precip",
     
     "mean-spei",
     "prop-months-lte-neg0.8-spei",
-    "prop-months-lte-neg1.6-spei")[1:15] # choose derived variable(s) to assemble
+    "prop-months-lte-neg1.6-spei",
+    "days-gte-b95perc-fwi")[24] # choose derived variable(s) to assemble
 
 
 
@@ -43,7 +44,7 @@ library(furrr)
 library(units)
 
 options(future.fork.enable = T)
-plan(multicore, gc = T)
+plan(multicore)
 
 source("scripts/functions.R")
 
@@ -80,6 +81,15 @@ tb_vars <-
 # setup grid and weights
 
 
+# spei and fwi have gaps (tiles not processed; ocean)
+if(any(str_detect(derived_vars, "spei|fwi"))){
+  template_var <- "total-precip"
+} else {
+  template_var <- derived_vars[1]
+}
+
+
+
 # TEMPLATE DOMAIN MAPS
 
 l_s_valid <-
@@ -91,7 +101,7 @@ l_s_valid <-
       dir_ensembled %>%
       list.files(full.names = T) %>%
       str_subset(dom) %>%
-      str_subset(derived_vars[1]) %>% # any var works
+      str_subset(template_var) %>%
       read_ncdf(ncsub = cbind(start = c(1, 1, 1), 
                               count = c(NA,NA,1))) %>% # only 1 timestep
       suppressMessages() %>% 
@@ -267,20 +277,16 @@ land <-
   setNames("a")
 
 
-# DESERT MAKS
-# 
-# if(var_input %in% c("spei", "fwi")){
-#   
-#   precip <- 
-#     read_stars("/mnt/bucket_mine/results/global_heat_pf/global_mean-annual-precip_wl0p5.tif")
-#   
-#   desert <- 
-#     precip %>%
-#     split("band") %>% 
-#     mutate(v = ifelse(mean <= 90, NA, 1)) %>% 
-#     select(v)
-#   
-# }
+# BARREN MASK
+
+if(any(str_detect(derived_vars, "spei|fwi"))){
+  
+  barren <- 
+    "/mnt/bucket_cmip5/Probable_futures/land_module/maps/mask_layers/modis_barren_mask_ge90perc_regridto22kmwmean.tif" %>% 
+    read_stars() %>% 
+    st_warp(global) %>% 
+    setNames("barren")
+}
 
 
 
@@ -367,7 +373,7 @@ walk(derived_vars, function(derived_var){
       
       l_s_weighted <- 
         
-        future_map2(l_s_wl, l_s_weights, function(s, w){
+        map2(l_s_wl, l_s_weights, function(s, w){
           
           orig_names <- names(s)
           
@@ -403,7 +409,7 @@ walk(derived_vars, function(derived_var){
           }
           
         },
-        FUTURE = T) %>% 
+        FUTURE = F) %>% 
         setNames(wl)
       
       return(mos)
@@ -411,10 +417,10 @@ walk(derived_vars, function(derived_var){
     })
   
   
-  # if(str_detect(final_name, "change")){
-  #   
-  #   print(str_glue("Calculating differences"))
-  #   
+  if(str_detect(final_name, "change")){
+
+    print(str_glue("Calculating differences"))
+
   #   
   #   if(str_detect(final_name, "freq")){
   #     
@@ -428,33 +434,34 @@ walk(derived_vars, function(derived_var){
   #     
   #   } else {
   #     
-  #     l_mos_wl <-
-  #       l_mos_wl[2:6] %>%
-  #       map(function(s){
-  #         
-  #         s - l_mos_wl[[1]]
-  #         
-  #       }) %>%
-  #       {append(list(l_mos_wl[[1]]), .)}
+      l_mos_wl <-
+        l_mos_wl[2:6] %>%
+        map(function(s){
+
+          s - l_mos_wl[[1]]
+
+        }) %>%
+        {append(list(l_mos_wl[[1]]), .)}
   #     
   #   }
-  # }
+  }
   
   
   s <- 
     l_mos_wl %>% 
     do.call(c, .) %>% 
     merge(name = "wl") %>% 
-    split("stats")
+    split("stats") %>% 
+    st_set_dimensions(3, values = as.numeric(wls))
   
   
-  # if(var_input %in% c("spei", "fwi")){
-  #   
-  #   print(str_glue("Removing deserts"))
-  #   
-  #   s[is.na(desert)] <- NA
-  #   
-  # }
+  if(str_detect(derived_vars, "spei|fwi")){
+
+    print(str_glue("Removing deserts"))
+
+    s[barren == 1] <- -99999
+
+  }
   
   
   s <- 
@@ -468,7 +475,7 @@ walk(derived_vars, function(derived_var){
   print(str_glue("  Saving"))
   
   file_name <- str_glue("{dir_mosaicked}/{final_name}_v02.nc")
-  fn_write_nc(s, file_name)
+  fn_write_nc(s, file_name, "wl")
   
   
 })

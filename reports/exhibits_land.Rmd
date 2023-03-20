@@ -214,4 +214,73 @@ pmap(windows, function(x1,y1){
 ```
 
 
+## Change in wildfire days
+```{r}
+
+s <- 
+  dir_mosaicked %>% 
+  list.files(full.names = T) %>%
+  str_subset(str_glue("{derived_vars[26]}_")) %>% 
+  str_subset("v02") %>% 
+  read_ncdf(var = "perc50") %>% 
+  setNames("mean")
+
+s[is.na(land_rast_0.2)] <- NA
+
+pmap(windows, function(x1,y1){
+  
+  fn_plot(x1,y1, slices = c(2,4,6), type = "div", u = "days")  
+  
+}) %>%
+  wrap_plots(ncol = 1)
+
+```
+
+
+## Climate zones
+```{r}
+
+s <- 
+  dir_mosaicked %>% 
+  list.files(full.names = T) %>%
+  str_subset("climate-zones") %>% 
+  str_subset("v02") %>% 
+  read_ncdf()
+
+s[is.na(land_rast_0.2)] <- NA
+
+slices = c(1,3,6)
+
+pmap(windows, function(x1,y1){
+  
+  tb <- 
+    s %>% 
+    slice(wl, slices) %>%
+    st_set_dimensions("wl", value = wls[slices]) %>%
+    filter(lon > x1,
+           lon < x1+60,
+           lat > y1,
+           lat < y1+50) %>% 
+    as_tibble()
+  
+  ggplot() +
+    geom_raster(data = tb, aes(lon, lat, fill = factor(climzone))) +
+    facet_wrap(~wl, ncol = 3) +
+    theme(axis.title = element_blank(),
+          legend.position = "bottom") +
+    coord_equal() +
+    scale_x_continuous(expand = c(0, 0)) +
+    scale_y_continuous(expand = c(0, 0)) +
+    scale_fill_brewer(palette = "Set3",
+                      na.value = "transparent",
+                      name = str_glue("Clim code  "),
+                      na.translate = F) +
+    guides(fill = guide_legend(nrow = 1, keywidth = 0.8, keyheight = 0.8))
+  
+  
+}) %>%
+  wrap_plots(ncol = 1)
+
+
+```
 
